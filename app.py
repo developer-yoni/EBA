@@ -296,8 +296,8 @@ def custom_query():
         
         print(f'📅 선택된 기준월: {selected_month}', flush=True)
         
-        # 현재 로드된 DataFrame을 테이블 형태로 변환
-        table_data = ""
+        # 현재 선택된 월의 DataFrame을 테이블 형태로 변환
+        current_month_table = ""
         if cache.get('data') is not None:
             df = cache['data']
             # 주요 컬럼만 선택하여 테이블 생성
@@ -310,8 +310,28 @@ def custom_query():
                 # 상위 50개만 (너무 많으면 토큰 초과)
                 df_top = df_clean.head(50)
                 # 테이블 형태로 변환
-                table_data = df_top.to_string(index=False)
-                print(f'📊 테이블 데이터: {len(df_top)} 행, {len(available_cols)} 컬럼', flush=True)
+                current_month_table = df_top.to_string(index=False)
+                print(f'📊 현재 월 테이블: {len(df_top)} 행, {len(available_cols)} 컬럼', flush=True)
+        
+        # 전체 기간 데이터 (기간별 비교용)
+        all_months_summary = ""
+        available_months = []
+        if cache.get('full_data') is not None:
+            df_full = cache['full_data']
+            if 'snapshot_month' in df_full.columns:
+                available_months = sorted(df_full['snapshot_month'].unique().tolist())
+                print(f'📅 사용 가능한 월: {available_months}', flush=True)
+                
+                # 각 월별로 주요 CPO의 데이터 요약 (상위 20개만)
+                relevant_cols_with_month = ['snapshot_month', 'CPO명', '충전소수', '완속충전기', '급속충전기', '총충전기', '시장점유율']
+                available_cols_full = [col for col in relevant_cols_with_month if col in df_full.columns]
+                
+                if len(available_cols_full) > 0:
+                    df_full_clean = df_full[available_cols_full].dropna(subset=['CPO명'])
+                    # 각 월별 상위 20개 CPO만 추출
+                    df_summary = df_full_clean.groupby('snapshot_month').head(20)
+                    all_months_summary = df_summary.to_string(index=False, max_rows=200)
+                    print(f'📊 전체 기간 요약: {len(df_summary)} 행', flush=True)
         
         # 현재 분석된 인사이트 데이터
         insights_data = ""
@@ -326,18 +346,25 @@ def custom_query():
 ## 사용자 질문
 {query}
 
-## 현재 선택된 기준월
-{selected_month}
+## 사용 가능한 데이터
 
-## 실제 데이터 테이블 (최우선 참고 - 이 데이터가 가장 정확합니다!)
-
-**중요: 아래 테이블은 {selected_month} 기준의 실제 데이터입니다. 반드시 이 테이블에서 정확한 값을 찾아 답변하세요.**
+### 1. 현재 선택된 월 데이터 ({selected_month})
+**단일 월 조회 시 사용**
 
 ```
-{table_data}
+{current_month_table}
+```
+
+### 2. 전체 기간 데이터 (기간별 비교용)
+**사용 가능한 월: {', '.join(available_months)}**
+**기간별 비교 조회 시 사용**
+
+```
+{all_months_summary}
 ```
 
 **컬럼 설명:**
+- snapshot_month: 기준 연월 (YYYY-MM 형식)
 - CPO명: 충전사업자 이름
 - 순위: 시장점유율 기반 순위
 - 충전소수: 운영 중인 충전소 개수
@@ -353,44 +380,92 @@ def custom_query():
 
 ## 질의 처리 방식 (단계별 사고 - Chain of Thought)
 
-**반드시 다음 단계를 순서대로 수행하세요:**
+**먼저 질의 유형을 판단하세요:**
 
-### Step 1: 질의 분석
-- 사용자가 요청한 것: [무엇을 찾는가?]
-- 필요한 컬럼: [어떤 컬럼을 봐야 하는가?]
-- 정렬 기준: [어떤 순서로 정렬하는가?]
-- 개수 제한: [몇 개를 보여줘야 하는가?]
+### 질의 유형 A: 단일 월 조회
+- "2025년 10월에 급속충전기가 많은 top 3"
+- "2025년 9월 한국전력공사의 충전소 수"
+→ **"현재 선택된 월 데이터" 사용**
 
-### Step 2: 테이블에서 데이터 찾기
-- 위의 "실제 데이터 테이블"을 한 줄씩 읽으면서
-- 해당 컬럼의 값을 확인
-- 정렬 기준에 따라 상위 N개 선택
+### 질의 유형 B: 기간별 비교 조회
+- "2025년 1월부터 10월까지 완속충전기 증가량이 많은 top 5"
+- "2024년 12월과 2025년 10월 비교"
+→ **"전체 기간 데이터" 사용**
 
-### Step 3: 선택된 데이터 검증
-- 선택한 각 행의 CPO명과 해당 컬럼 값을 명시
-- 예: "1위: 한국전력공사, 급속충전기: 12,345기"
+---
 
-### Step 4: 최종 답변 작성
-- 검증된 데이터로 자연어 답변 생성
+### 유형 A: 단일 월 조회 처리
+
+**Step 1: 질의 분석**
+- 요청 월: [YYYY-MM]
+- 요청 항목: [무엇을 찾는가?]
+- 필요 컬럼: [어떤 컬럼?]
+- 정렬 기준: [어떤 순서?]
+- 개수: [몇 개?]
+
+**Step 2: 현재 월 테이블 조회**
+- 해당 컬럼 값 확인
+- 정렬 후 상위 N개 선택
+
+**Step 3: 검증 및 답변**
+
+---
+
+### 유형 B: 기간별 비교 조회 처리
+
+**Step 1: 질의 분석**
+- 시작 월: [YYYY-MM]
+- 종료 월: [YYYY-MM]
+- 비교 항목: [어떤 컬럼?]
+- 계산 방식: [증가량 = 종료월 값 - 시작월 값]
+
+**Step 2: 전체 기간 데이터에서 두 시점 조회**
+
+예: "2025년 1월부터 10월까지 완속충전기 증가량 top 5"
+
+1. 전체 기간 데이터에서 snapshot_month = "2025-01" 필터링
+   - 각 CPO의 완속충전기 값 추출 → 1월_값
+   
+2. 전체 기간 데이터에서 snapshot_month = "2025-10" 필터링
+   - 각 CPO의 완속충전기 값 추출 → 10월_값
+   
+3. 각 CPO별로 증가량 계산
+   - 증가량 = 10월_값 - 1월_값
+   
+4. 증가량 기준으로 내림차순 정렬
+   
+5. 상위 5개 선택
+
+**Step 3: 검증**
+- 각 CPO의 1월 값, 10월 값, 증가량을 명시
+- 예: "한국전력공사: 1월 10,000기 → 10월 12,000기 (증가량: +2,000기)"
+
+**Step 4: 답변 작성**
 - 표 형식으로 정리
 
-**예시:**
+---
 
-질문: "2025년 10월에 급속충전기가 많은 순서대로 top 3 충전사업자를 알려줘"
+### 예시 1: 단일 월 조회
 
-Step 1 분석:
-- 요청: 급속충전기가 많은 CPO
-- 필요 컬럼: CPO명, 급속충전기
-- 정렬: 급속충전기 내림차순
-- 개수: 3개
+질문: "2025년 10월에 급속충전기가 많은 top 3"
 
-Step 2 테이블 조회:
-- 테이블에서 "급속충전기" 컬럼을 확인
-- 값이 큰 순서대로 정렬
-- 상위 3개 행 선택
+Step 1: 단일 월 조회 → 현재 월 테이블 사용
+Step 2: 급속충전기 컬럼 확인, 내림차순 정렬, 상위 3개
+Step 3: 답변 작성
 
-Step 3 검증:
-- 1위: [CPO명], 급속충전기: [정확한 숫자]
+---
+
+### 예시 2: 기간별 비교
+
+질문: "2025년 1월부터 10월까지 완속충전기 증가량 top 5"
+
+Step 1: 기간별 비교 → 전체 기간 데이터 사용
+Step 2: 
+- 2025-01 데이터에서 각 CPO의 완속충전기 값
+- 2025-10 데이터에서 각 CPO의 완속충전기 값
+- 증가량 = 10월 - 1월
+Step 3: 증가량 기준 정렬, 상위 5개
+Step 4: 답변 작성
 - 2위: [CPO명], 급속충전기: [정확한 숫자]
 - 3위: [CPO명], 급속충전기: [정확한 숫자]
 
