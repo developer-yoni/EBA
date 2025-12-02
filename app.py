@@ -562,6 +562,72 @@ Step 4 답변:
             'error': str(e)
         }), 500
 
+def initialize_data():
+    """앱 시작 시 자동으로 모든 데이터 로드"""
+    try:
+        print('\n' + '='*80)
+        print('🚀 데이터 자동 로드 시작...')
+        print('='*80 + '\n')
+        
+        import sys
+        sys.stdout.flush()
+        
+        loader = ChargingDataLoader()
+        
+        # 전체 월 데이터 로드
+        print('🔄 전체 월 데이터 로드 중... (약 1-2분 소요)')
+        df = loader.load_multiple()
+        
+        if df is None:
+            print('❌ 데이터 로드 실패')
+            return False
+        
+        # 캐시 저장
+        cache['data'] = df
+        cache['full_data'] = df.copy()
+        
+        # 기본 정보
+        unique_months = []
+        latest_month = None
+        
+        if 'snapshot_month' in df.columns:
+            unique_months = sorted(df['snapshot_month'].unique().tolist(), reverse=True)
+            latest_month = unique_months[0] if unique_months else None
+        
+        print(f'\n✅ 데이터 로드 완료!')
+        print(f'   - 총 행 수: {len(df):,}')
+        print(f'   - 포함 월: {len(unique_months)}개월')
+        print(f'   - 기간: {unique_months[-1] if unique_months else "N/A"} ~ {unique_months[0] if unique_months else "N/A"}')
+        print(f'   - 최신 월: {latest_month}')
+        
+        # 최신 월로 필터링
+        if latest_month:
+            df_latest = df[df['snapshot_month'] == latest_month].copy()
+            cache['data'] = df_latest
+            print(f'   - 기본 선택 월: {latest_month} ({len(df_latest)} 행)')
+        
+        # 데이터 분석 실행
+        print('\n📊 데이터 분석 중...')
+        analyzer = ChargingDataAnalyzer(cache['data'])
+        insights = analyzer.generate_insights()
+        cache['insights'] = insights
+        print('✅ 데이터 분석 완료')
+        
+        print('\n' + '='*80)
+        print('🎉 초기화 완료! 서비스 준비됨')
+        print('='*80 + '\n')
+        
+        return True
+        
+    except Exception as e:
+        import traceback
+        print(f'\n❌ 초기화 오류: {e}')
+        traceback.print_exc()
+        return False
+
 if __name__ == '__main__':
+    # 앱 시작 시 데이터 자동 로드
+    initialize_data()
+    
     # use_reloader=False로 설정하여 파일 변경 시 자동 재시작 방지
     app.run(debug=True, host='0.0.0.0', port=5001, use_reloader=False, threaded=True)

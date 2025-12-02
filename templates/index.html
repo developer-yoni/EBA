@@ -397,9 +397,11 @@
             status.classList.remove('hidden');
         }
         
-        // 페이지 로드 시 월 목록만 빠르게 가져오기
+        // 페이지 로드 시 월 목록 가져오기 및 데이터 상태 확인
         async function loadMonthList() {
             console.log('🔄 loadMonthList 함수 시작');
+            showStatus('데이터 초기화 중...', 'loading');
+            
             try {
                 console.log('📡 /api/months 요청 중...');
                 const response = await fetch('/api/months');
@@ -432,12 +434,64 @@
                     
                     select.disabled = false;
                     console.log('✅ 드롭다운 활성화 완료');
+                    
+                    // 데이터가 이미 로드되어 있는지 확인
+                    await checkDataStatus();
                 } else {
                     console.error('❌ API 응답 실패:', data);
+                    showStatus('초기화 실패', 'error');
                 }
             } catch (error) {
                 console.error('❌ 월 목록 로드 오류:', error);
                 showStatus('월 목록 로드 실패', 'error');
+            }
+        }
+        
+        // 서버에서 데이터가 이미 로드되어 있는지 확인
+        async function checkDataStatus() {
+            try {
+                // 대시보드 API를 호출하여 데이터 로드 상태 확인
+                const response = await fetch('/api/dashboard');
+                const data = await response.json();
+                
+                if (data.success) {
+                    // 데이터가 이미 로드되어 있음
+                    dataLoaded = true;
+                    const dashboard = data.dashboard;
+                    const targetMonth = dashboard.target_month || '전체';
+                    
+                    showStatus(`데이터 준비 완료 (${targetMonth})`, 'success');
+                    
+                    // 버튼 활성화
+                    document.getElementById('dashboardBtn').disabled = false;
+                    document.getElementById('reportBtn').disabled = false;
+                    
+                    // 데이터 정보 표시
+                    document.getElementById('statsGrid').style.display = 'grid';
+                    
+                    const summaryTable = dashboard.summary_table;
+                    if (summaryTable && summaryTable.total) {
+                        document.getElementById('dataStats').innerHTML = `
+                            <p><strong>총 CPO:</strong> ${summaryTable.total.cpos.toLocaleString()}개</p>
+                            <p><strong>총 충전소:</strong> ${summaryTable.total.stations.toLocaleString()}개</p>
+                            <p><strong>총 충전기:</strong> ${summaryTable.total.total_chargers.toLocaleString()}기</p>
+                        `;
+                    }
+                    
+                    document.getElementById('snapshotInfo').innerHTML = `
+                        <p><strong>기준월:</strong> ${targetMonth}</p>
+                        <p><strong>상태:</strong> 자동 로드 완료</p>
+                    `;
+                    
+                    console.log('✅ 데이터가 이미 로드되어 있습니다');
+                } else {
+                    // 데이터가 아직 로드되지 않음
+                    showStatus('데이터 로드 필요', 'error');
+                    console.log('⚠️ 데이터를 로드해주세요');
+                }
+            } catch (error) {
+                console.error('데이터 상태 확인 오류:', error);
+                showStatus('데이터 로드 필요', 'error');
             }
         }
         
