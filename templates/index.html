@@ -399,15 +399,21 @@
         
         // 페이지 로드 시 월 목록만 빠르게 가져오기
         async function loadMonthList() {
+            console.log('🔄 loadMonthList 함수 시작');
             try {
+                console.log('📡 /api/months 요청 중...');
                 const response = await fetch('/api/months');
+                console.log('📥 응답 받음:', response.status);
                 const data = await response.json();
+                console.log('📊 데이터:', data);
                 
                 if (data.success) {
                     availableMonths = data.months || [];
+                    console.log('✅ 사용 가능한 월:', availableMonths);
                     
                     // 드롭다운 업데이트
                     const select = document.getElementById('monthSelect');
+                    console.log('📝 드롭다운 요소:', select);
                     select.innerHTML = '<option value="">-- 기준월 선택 --</option>';
                     select.innerHTML += '<option value="ALL">-- 전체 월 --</option>';
                     
@@ -421,12 +427,16 @@
                     // 최신 월 자동 선택
                     if (data.latest_month) {
                         select.value = data.latest_month;
+                        console.log('🎯 최신 월 선택:', data.latest_month);
                     }
                     
                     select.disabled = false;
+                    console.log('✅ 드롭다운 활성화 완료');
+                } else {
+                    console.error('❌ API 응답 실패:', data);
                 }
             } catch (error) {
-                console.error('월 목록 로드 오류:', error);
+                console.error('❌ 월 목록 로드 오류:', error);
                 showStatus('월 목록 로드 실패', 'error');
             }
         }
