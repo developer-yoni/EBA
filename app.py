@@ -306,4 +306,4 @@ def custom_query():
 
 if __name__ == '__main__':
     # use_reloader=False로 설정하여 파일 변경 시 자동 재시작 방지
-    app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False, threaded=True)
+    app.run(debug=True, host='0.0.0.0', port=5001, use_reloader=False, threaded=True)
