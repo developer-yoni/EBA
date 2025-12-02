@@ -970,11 +970,14 @@
                 const data = await response.json();
                 
                 if (data.success) {
+                    // 답변을 마크다운으로 렌더링
+                    const renderedAnswer = renderMarkdown(data.answer);
+                    
                     resultDiv.innerHTML = `
                         <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-top: 10px;">
                             <strong style="color: #667eea;">질문:</strong> ${data.query}<br><br>
                             <strong style="color: #48bb78;">답변:</strong><br>
-                            <div style="white-space: pre-wrap; line-height: 1.6; margin-top: 10px;">${data.answer}</div>
+                            <div class="report-content" style="margin-top: 10px;">${renderedAnswer}</div>
                         </div>
                     `;
                 } else {
