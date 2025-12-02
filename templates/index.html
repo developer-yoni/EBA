@@ -281,6 +281,125 @@
             font-size: 16px;
             margin-right: 4px;
         }
+        
+        /* 탭 스타일 */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            background: white;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            color: #718096;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            color: #667eea;
+            background: #f7fafc;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* 기간 선택 스타일 */
+        .period-selector {
+            margin: 15px 0;
+        }
+        
+        .period-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .period-label {
+            font-weight: 600;
+            color: #2d3748;
+            min-width: 80px;
+        }
+        
+        .month-select {
+            padding: 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+            min-width: 150px;
+            transition: all 0.3s;
+        }
+        
+        .month-select:hover {
+            border-color: #667eea;
+        }
+        
+        .month-select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .period-info {
+            padding: 10px 15px;
+            background: #f7fafc;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #718096;
+        }
+        
+        .period-warning {
+            padding: 10px 15px;
+            background: #fff5f5;
+            border: 1px solid #feb2b2;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #c53030;
+            margin-top: 10px;
+        }
+        
+        /* 진행도 바 스타일 */
+        .progress-container {
+            width: 100%;
+            background: #e2e8f0;
+            border-radius: 10px;
+            height: 30px;
+            margin: 20px 0;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -288,37 +407,67 @@
         <header>
             <h1>⚡ 한국 전기차 충전 인프라 분석 리포트</h1>
             <p class="subtitle">AWS Bedrock + Knowledge Base 기반 자동 분석 시스템</p>
+            <div style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                <span id="dataStatus" style="font-size: 13px;">🔄 데이터 초기화 중...</span>
+            </div>
         </header>
         
-        <div class="control-panel">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
-                <label for="monthSelect" style="font-weight: 600;">📅 기준월 선택:</label>
-                <select id="monthSelect" disabled style="padding: 10px; border-radius: 6px; border: 2px solid #e2e8f0; font-size: 14px; min-width: 150px;">
-                    <option value="">로딩 중...</option>
-                </select>
-                <button class="btn" onclick="loadSelectedData()" style="background: #805ad5;">📥 데이터 로드</button>
+        <!-- 탭 메뉴 -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('dashboard')">📊 데이터 대시보드</button>
+            <button class="tab" onclick="switchTab('report')">🤖 AI 리포트 생성</button>
+            <button class="tab" onclick="switchTab('query')">💬 커스텀 질의</button>
+        </div>
+        
+        <!-- 탭 컨텐츠 -->
+        
+        <!-- 데이터 대시보드 탭 -->
+        <div id="dashboardTab" class="tab-content active">
+            <div class="card" style="margin-bottom: 20px;">
+                <h3>📅 분석 기간 선택</h3>
+                <p style="color: #718096; margin-bottom: 15px;">시작월과 종료월을 선택하세요 (최대 1년)</p>
+                
+                <div class="period-selector">
+                    <div class="period-row">
+                        <span class="period-label">시작월:</span>
+                        <select id="dashboardStartMonth" class="month-select" onchange="validateDashboardPeriod()">
+                            <option value="">선택하세요</option>
+                        </select>
+                    </div>
+                    
+                    <div class="period-row">
+                        <span class="period-label">종료월:</span>
+                        <select id="dashboardEndMonth" class="month-select" onchange="validateDashboardPeriod()">
+                            <option value="">선택하세요</option>
+                        </select>
+                    </div>
+                    
+                    <div id="dashboardPeriodInfo" class="period-info hidden">
+                        선택된 기간: <span id="dashboardPeriodText"></span>
+                    </div>
+                    
+                    <div id="dashboardPeriodWarning" class="period-warning hidden">
+                        ⚠️ 기간은 최대 1년까지만 선택할 수 있습니다
+                    </div>
+                </div>
+                
+                <button class="btn" onclick="showDashboard()" id="dashboardBtn" disabled style="margin-top: 10px;">
+                    📊 대시보드 생성
+                </button>
             </div>
             
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <button class="btn" onclick="showDashboard()" id="dashboardBtn" disabled>📊 데이터 대시보드</button>
-                <button class="btn btn-secondary" onclick="generateReport()" id="reportBtn" disabled>🤖 AI 리포트 생성</button>
-                <span id="status" class="status hidden"></span>
+            <div class="grid" id="statsGrid" style="display: none;">
+                <div class="card">
+                    <h3>📈 데이터 현황</h3>
+                    <div id="dataStats"></div>
+                </div>
+                <div class="card">
+                    <h3>📅 스냅샷 정보</h3>
+                    <div id="snapshotInfo"></div>
+                </div>
             </div>
-        </div>
-        
-        <div class="grid" id="statsGrid" style="display: none;">
-            <div class="card">
-                <h3>📈 데이터 현황</h3>
-                <div id="dataStats"></div>
-            </div>
-            <div class="card">
-                <h3>📅 스냅샷 정보</h3>
-                <div id="snapshotInfo"></div>
-            </div>
-        </div>
-        
-        <!-- 대시보드 섹션 -->
-        <div id="dashboardContainer" class="hidden" style="margin-top: 30px;">
+            
+            <div id="dashboardContainer" class="hidden" style="margin-top: 30px;">
             <div class="report-section">
                 <h2>📊 데이터 대시보드</h2>
                 
@@ -331,50 +480,88 @@
                 <!-- 차트 그리드 -->
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px;">
                     <div class="card">
-                        <h3>📈 전체 충전기 증감량 추이 (최근 6개월)</h3>
+                        <h3 id="totalTrendTitle">📈 전체 충전기 증감량 추이</h3>
                         <canvas id="totalTrendChart"></canvas>
                     </div>
                     
                     <div class="card">
-                        <h3>🏆 GS차지비 충전기 증감량 추이 (최근 6개월)</h3>
+                        <h3 id="gsTrendTitle">🏆 GS차지비 충전기 증감량 추이</h3>
                         <canvas id="gsTrendChart"></canvas>
                     </div>
                     
                     <div class="card">
-                        <h3>📊 완속/급속 충전기 누적 수량 (최근 6개월)</h3>
+                        <h3 id="cumulativeTitle">📊 완속/급속 충전기 운영 대수</h3>
                         <canvas id="cumulativeChargersChart"></canvas>
                     </div>
                     
-                    <div class="card" style="grid-column: 1 / -1;">
-                        <h3>📊 상위 5개사 시장점유율 변화 (최근 6개월)</h3>
+                    <div class="card">
+                        <h3 id="marketShareTitle">📊 상위 5개사 시장점유율 변화</h3>
                         <canvas id="top5MarketShareChart"></canvas>
                     </div>
                 </div>
             </div>
         </div>
+        </div>
         
-        <div id="reportContainer" class="hidden">
-            <div class="report-section">
-                <h2>📝 경영진 요약</h2>
-                <div class="report-content" id="executiveSummary"></div>
+        <!-- AI 리포트 생성 탭 -->
+        <div id="reportTab" class="tab-content">
+            <div class="card" style="margin-bottom: 20px;">
+                <h3>📅 분석 기준월 선택</h3>
+                <p style="color: #718096; margin-bottom: 15px;">리포트를 생성할 기준월을 선택하세요 (GS차지비 관점 분석)</p>
+                
+                <div class="period-selector">
+                    <div class="period-row">
+                        <span class="period-label">기준월:</span>
+                        <select id="reportTargetMonth" class="month-select" onchange="validateReportMonth()">
+                            <option value="">선택하세요</option>
+                        </select>
+                    </div>
+                    
+                    <div id="reportMonthInfo" class="period-info hidden">
+                        <span id="reportMonthText"></span>
+                    </div>
+                </div>
+                
+                <button class="btn btn-secondary" onclick="generateReport()" id="reportBtn" disabled style="margin-top: 10px;">
+                    🤖 AI 리포트 생성
+                </button>
+                
+                <!-- 진행도 표시 -->
+                <div id="reportProgress" class="hidden" style="margin-top: 20px;">
+                    <div class="progress-container">
+                        <div class="progress-bar" id="reportProgressBar" style="width: 0%;">0%</div>
+                    </div>
+                    <p id="reportProgressText" style="text-align: center; color: #718096; margin-top: 10px;">준비 중...</p>
+                </div>
             </div>
             
-            <div class="report-section">
-                <h2>🏢 CPO 분석</h2>
-                <div class="report-content" id="cpoAnalysis"></div>
-            </div>
-            
-            <div class="report-section">
-                <h2>📈 트렌드 및 예측</h2>
-                <div class="report-content" id="trendForecast"></div>
+            <div id="reportContainer" class="hidden">
+                <div class="report-section">
+                    <h2>📝 경영진 요약</h2>
+                    <div class="report-content" id="executiveSummary"></div>
+                </div>
+                
+                <div class="report-section">
+                    <h2>🏢 CPO 분석</h2>
+                    <div class="report-content" id="cpoAnalysis"></div>
+                </div>
+                
+                <div class="report-section">
+                    <h2>📈 트렌드 및 예측</h2>
+                    <div class="report-content" id="trendForecast"></div>
+                </div>
             </div>
         </div>
         
-        <div class="card query-box">
-            <h3>💬 커스텀 질의</h3>
-            <input type="text" class="query-input" id="queryInput" placeholder="데이터에 대해 궁금한 점을 물어보세요...">
-            <button class="btn" onclick="submitQuery()">질문하기</button>
-            <div id="queryResult" style="margin-top: 20px;"></div>
+        <!-- 커스텀 질의 탭 -->
+        <div id="queryTab" class="tab-content">
+            <div class="card query-box">
+                <h3>💬 커스텀 질의</h3>
+                <p style="color: #718096; margin-bottom: 15px;">데이터에 대해 궁금한 점을 자유롭게 질문하세요. AI가 정확한 데이터를 기반으로 답변합니다.</p>
+                <input type="text" class="query-input" id="queryInput" placeholder="예: 2025년 10월 급속충전기를 많이 운영하는 충전사업자 top 3 알려줘">
+                <button class="btn" onclick="submitQuery()">질문하기</button>
+                <div id="queryResult" style="margin-top: 20px;"></div>
+            </div>
         </div>
     </div>
     
@@ -390,6 +577,31 @@
             top5MarketShare: null
         };
         
+        // 탭 전환 함수
+        function switchTab(tabName) {
+            // 모든 탭 비활성화
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // 모든 탭 컨텐츠 숨기기
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // 선택된 탭 활성화
+            event.target.classList.add('active');
+            
+            // 선택된 탭 컨텐츠 표시
+            if (tabName === 'dashboard') {
+                document.getElementById('dashboardTab').classList.add('active');
+            } else if (tabName === 'report') {
+                document.getElementById('reportTab').classList.add('active');
+            } else if (tabName === 'query') {
+                document.getElementById('queryTab').classList.add('active');
+            }
+        }
+        
         function showStatus(message, type) {
             const status = document.getElementById('status');
             status.textContent = message;
@@ -400,98 +612,191 @@
         // 페이지 로드 시 월 목록 가져오기 및 데이터 상태 확인
         async function loadMonthList() {
             console.log('🔄 loadMonthList 함수 시작');
-            showStatus('데이터 초기화 중...', 'loading');
+            document.getElementById('dataStatus').textContent = '🔄 데이터 초기화 중...';
             
             try {
-                console.log('📡 /api/months 요청 중...');
                 const response = await fetch('/api/months');
-                console.log('📥 응답 받음:', response.status);
                 const data = await response.json();
-                console.log('📊 데이터:', data);
                 
                 if (data.success) {
                     availableMonths = data.months || [];
                     console.log('✅ 사용 가능한 월:', availableMonths);
                     
-                    // 드롭다운 업데이트
-                    const select = document.getElementById('monthSelect');
-                    console.log('📝 드롭다운 요소:', select);
-                    select.innerHTML = '<option value="">-- 기준월 선택 --</option>';
-                    select.innerHTML += '<option value="ALL">-- 전체 월 --</option>';
-                    
-                    availableMonths.forEach(month => {
-                        const option = document.createElement('option');
-                        option.value = month;
-                        option.textContent = month;
-                        select.appendChild(option);
-                    });
-                    
-                    // 최신 월 자동 선택
-                    if (data.latest_month) {
-                        select.value = data.latest_month;
-                        console.log('🎯 최신 월 선택:', data.latest_month);
-                    }
-                    
-                    select.disabled = false;
-                    console.log('✅ 드롭다운 활성화 완료');
+                    // 다중 선택 UI 생성
+                    createMonthSelectors();
                     
                     // 데이터가 이미 로드되어 있는지 확인
                     await checkDataStatus();
                 } else {
                     console.error('❌ API 응답 실패:', data);
-                    showStatus('초기화 실패', 'error');
+                    document.getElementById('dataStatus').textContent = '❌ 초기화 실패';
                 }
             } catch (error) {
                 console.error('❌ 월 목록 로드 오류:', error);
-                showStatus('월 목록 로드 실패', 'error');
+                document.getElementById('dataStatus').textContent = '❌ 월 목록 로드 실패';
             }
+        }
+        
+        // 기간 선택 UI 생성
+        function createMonthSelectors() {
+            // 대시보드용 선택기
+            populateMonthSelect('dashboardStartMonth');
+            populateMonthSelect('dashboardEndMonth');
+            
+            // 리포트용 선택기 (단일 월)
+            populateMonthSelect('reportTargetMonth');
+            
+            // 최신 월 자동 선택
+            if (availableMonths.length > 0) {
+                document.getElementById('dashboardStartMonth').value = availableMonths[availableMonths.length - 1];
+                document.getElementById('dashboardEndMonth').value = availableMonths[0];
+                document.getElementById('reportTargetMonth').value = availableMonths[0];
+                
+                validateDashboardPeriod();
+                validateReportMonth();
+            }
+        }
+        
+        // 월 선택 드롭다운 채우기
+        function populateMonthSelect(selectId) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '<option value="">선택하세요</option>';
+            
+            availableMonths.forEach(month => {
+                const option = document.createElement('option');
+                option.value = month;
+                option.textContent = month;
+                select.appendChild(option);
+            });
+        }
+        
+        // 두 날짜 사이의 월 차이 계산
+        function getMonthDifference(startMonth, endMonth) {
+            const [startYear, startMon] = startMonth.split('-').map(Number);
+            const [endYear, endMon] = endMonth.split('-').map(Number);
+            return (endYear - startYear) * 12 + (endMon - startMon);
+        }
+        
+        // 시작월과 종료월 사이의 모든 월 가져오기
+        function getMonthsInRange(startMonth, endMonth) {
+            const months = [];
+            const [startYear, startMon] = startMonth.split('-').map(Number);
+            const [endYear, endMon] = endMonth.split('-').map(Number);
+            
+            let currentYear = startYear;
+            let currentMonth = startMon;
+            
+            while (currentYear < endYear || (currentYear === endYear && currentMonth <= endMon)) {
+                const monthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+                if (availableMonths.includes(monthStr)) {
+                    months.push(monthStr);
+                }
+                
+                currentMonth++;
+                if (currentMonth > 12) {
+                    currentMonth = 1;
+                    currentYear++;
+                }
+            }
+            
+            return months;
+        }
+        
+        // 대시보드 기간 검증
+        function validateDashboardPeriod() {
+            const startMonth = document.getElementById('dashboardStartMonth').value;
+            const endMonth = document.getElementById('dashboardEndMonth').value;
+            const btn = document.getElementById('dashboardBtn');
+            const info = document.getElementById('dashboardPeriodInfo');
+            const warning = document.getElementById('dashboardPeriodWarning');
+            const periodText = document.getElementById('dashboardPeriodText');
+            
+            if (!startMonth || !endMonth) {
+                btn.disabled = true;
+                info.classList.add('hidden');
+                warning.classList.add('hidden');
+                return;
+            }
+            
+            const monthDiff = getMonthDifference(startMonth, endMonth);
+            
+            if (monthDiff < 0) {
+                btn.disabled = true;
+                info.classList.add('hidden');
+                warning.classList.remove('hidden');
+                warning.textContent = '⚠️ 종료월은 시작월보다 이후여야 합니다';
+                return;
+            }
+            
+            if (monthDiff > 11) {
+                btn.disabled = true;
+                info.classList.add('hidden');
+                warning.classList.remove('hidden');
+                warning.textContent = '⚠️ 기간은 최대 1년(12개월)까지만 선택할 수 있습니다';
+                return;
+            }
+            
+            // 유효한 기간
+            btn.disabled = false;
+            warning.classList.add('hidden');
+            info.classList.remove('hidden');
+            
+            if (monthDiff === 0) {
+                periodText.textContent = `${startMonth} (단일 월)`;
+            } else {
+                periodText.textContent = `${startMonth} ~ ${endMonth} (${monthDiff + 1}개월)`;
+            }
+        }
+        
+        // 리포트 기준월 검증
+        function validateReportMonth() {
+            const targetMonth = document.getElementById('reportTargetMonth').value;
+            const btn = document.getElementById('reportBtn');
+            const info = document.getElementById('reportMonthInfo');
+            const monthText = document.getElementById('reportMonthText');
+            
+            if (!targetMonth) {
+                btn.disabled = true;
+                info.classList.add('hidden');
+                return;
+            }
+            
+            // 유효한 월 선택
+            btn.disabled = false;
+            info.classList.remove('hidden');
+            monthText.textContent = `📊 ${targetMonth} 기준 GS차지비 분석 리포트 (전후 1년 데이터 참고)`;
+        }
+        
+        // 리포트 기간 검증 (레거시 - 사용 안함)
+        function validateReportPeriod() {
+            validateReportMonth();
         }
         
         // 서버에서 데이터가 이미 로드되어 있는지 확인
         async function checkDataStatus() {
             try {
-                // 대시보드 API를 호출하여 데이터 로드 상태 확인
                 const response = await fetch('/api/dashboard');
                 const data = await response.json();
                 
                 if (data.success) {
-                    // 데이터가 이미 로드되어 있음
                     dataLoaded = true;
                     const dashboard = data.dashboard;
                     const targetMonth = dashboard.target_month || '전체';
                     
-                    showStatus(`데이터 준비 완료 (${targetMonth})`, 'success');
+                    document.getElementById('dataStatus').textContent = `✅ 데이터 준비 완료 (${targetMonth})`;
                     
                     // 버튼 활성화
                     document.getElementById('dashboardBtn').disabled = false;
                     document.getElementById('reportBtn').disabled = false;
                     
-                    // 데이터 정보 표시
-                    document.getElementById('statsGrid').style.display = 'grid';
-                    
-                    const summaryTable = dashboard.summary_table;
-                    if (summaryTable && summaryTable.total) {
-                        document.getElementById('dataStats').innerHTML = `
-                            <p><strong>총 CPO:</strong> ${summaryTable.total.cpos.toLocaleString()}개</p>
-                            <p><strong>총 충전소:</strong> ${summaryTable.total.stations.toLocaleString()}개</p>
-                            <p><strong>총 충전기:</strong> ${summaryTable.total.total_chargers.toLocaleString()}기</p>
-                        `;
-                    }
-                    
-                    document.getElementById('snapshotInfo').innerHTML = `
-                        <p><strong>기준월:</strong> ${targetMonth}</p>
-                        <p><strong>상태:</strong> 자동 로드 완료</p>
-                    `;
-                    
                     console.log('✅ 데이터가 이미 로드되어 있습니다');
                 } else {
-                    // 데이터가 아직 로드되지 않음
-                    showStatus('데이터 로드 필요', 'error');
+                    document.getElementById('dataStatus').textContent = '⚠️ 데이터 로드 필요';
                     console.log('⚠️ 데이터를 로드해주세요');
                 }
             } catch (error) {
                 console.error('데이터 상태 확인 오류:', error);
-                showStatus('데이터 로드 필요', 'error');
+                document.getElementById('dataStatus').textContent = '⚠️ 데이터 로드 필요';
             }
         }
         
@@ -603,41 +908,103 @@
         }
         
         async function showDashboard() {
-            showStatus('대시보드 로드 중...', 'loading');
+            // 선택된 기간 확인
+            const startMonth = document.getElementById('dashboardStartMonth').value;
+            const endMonth = document.getElementById('dashboardEndMonth').value;
             
+            if (!startMonth || !endMonth) {
+                alert('시작월과 종료월을 모두 선택해주세요');
+                return;
+            }
+            
+            // 기간 내 모든 월 가져오기
+            const selectedMonths = getMonthsInRange(startMonth, endMonth);
+            
+            console.log('📊 대시보드 생성 시작');
+            console.log('📅 기간:', startMonth, '~', endMonth);
+            console.log('📅 포함 월:', selectedMonths);
+            
+            // 대시보드 데이터 가져오기 (선택된 월들 전송)
             try {
-                const response = await fetch('/api/dashboard');
+                console.log('📡 대시보드 API 호출 중...');
+                const response = await fetch('/api/dashboard', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        months: selectedMonths,
+                        startMonth: startMonth,
+                        endMonth: endMonth
+                    })
+                });
                 const data = await response.json();
                 
+                console.log('📥 대시보드 응답:', data);
+                
                 if (data.success) {
-                    showStatus('대시보드 표시 완료', 'success');
+                    console.log('✅ 대시보드 표시');
                     displayDashboard(data.dashboard);
+                    
+                    // 데이터 정보 표시
+                    document.getElementById('statsGrid').style.display = 'grid';
+                    const summaryTable = data.dashboard.summary_table;
+                    if (summaryTable && summaryTable.total) {
+                        document.getElementById('dataStats').innerHTML = `
+                            <p><strong>총 CPO:</strong> ${summaryTable.total.cpos.toLocaleString()}개</p>
+                            <p><strong>총 충전소:</strong> ${summaryTable.total.stations.toLocaleString()}개</p>
+                            <p><strong>총 충전기:</strong> ${summaryTable.total.total_chargers.toLocaleString()}기</p>
+                        `;
+                    }
+                    
+                    document.getElementById('snapshotInfo').innerHTML = `
+                        <p><strong>분석 기간:</strong> ${startMonth} ~ ${endMonth}</p>
+                        <p><strong>포함 월:</strong> ${selectedMonths.length}개월</p>
+                    `;
                 } else {
-                    showStatus('오류: ' + data.error, 'error');
+                    alert('오류: ' + data.error);
                 }
             } catch (error) {
-                showStatus('오류: ' + error.message, 'error');
+                console.error('대시보드 오류:', error);
+                alert('오류: ' + error.message);
             }
         }
         
         function displayDashboard(dashboard) {
+            console.log('🎨 대시보드 렌더링 시작');
+            
             // 대시보드 컨테이너 표시
-            document.getElementById('dashboardContainer').classList.remove('hidden');
+            const container = document.getElementById('dashboardContainer');
+            if (container) {
+                container.classList.remove('hidden');
+                console.log('✅ 대시보드 컨테이너 표시');
+            } else {
+                console.error('❌ dashboardContainer를 찾을 수 없습니다');
+                return;
+            }
             
             // 핵심 요약 표시
             const summary = dashboard.summary || {};
             const summaryTable = dashboard.summary_table || null;
             const targetMonth = dashboard.target_month || '전체';
+            const startMonth = dashboard.start_month;
+            const endMonth = dashboard.end_month;
+            
+            // 기간 표시 문자열 (항상 시작월 ~ 종료월 형식)
+            let periodStr = targetMonth;
+            if (startMonth && endMonth) {
+                periodStr = `${startMonth} ~ ${endMonth}`;
+            }
             
             let summaryHTML = `
-                <p><strong>기준월:</strong> ${targetMonth}</p>
-                <p><strong>차트 기간:</strong> ${targetMonth}로부터 최근 6개월</p>
+                <p><strong>분석 기간:</strong> ${periodStr}</p>
             `;
             
             // 요약 테이블 추가
             if (summaryTable && summaryTable.total) {
                 const total = summaryTable.total;
                 const change = summaryTable.change;
+                
+                // 증감량 행 라벨 (항상 기간증감량으로 통일)
+                let changeLabel = `기간증감량<br><small>(${startMonth || targetMonth} ~ ${endMonth || targetMonth})</small>`;
                 
                 summaryHTML += `
                     <table class="summary-table">
@@ -653,7 +1020,7 @@
                         </thead>
                         <tbody>
                             <tr>
-                                <td><strong>전체CPO</strong></td>
+                                <td><strong>전체CPO<br><small>(${endMonth || targetMonth} 기준)</small></strong></td>
                                 <td>${total.cpos.toLocaleString()}</td>
                                 <td>${total.stations.toLocaleString()}</td>
                                 <td>${total.slow_chargers.toLocaleString()}</td>
@@ -661,7 +1028,7 @@
                                 <td>${total.total_chargers.toLocaleString()}</td>
                             </tr>
                             <tr>
-                                <td><strong>당월증감량</strong></td>
+                                <td><strong>${changeLabel}</strong></td>
                                 <td>${formatChange(change.cpos)}</td>
                                 <td>${formatChange(change.stations)}</td>
                                 <td>${formatChange(change.slow_chargers)}</td>
@@ -673,14 +1040,42 @@
                 `;
             }
             
-            document.getElementById('dashboardSummary').innerHTML = summaryHTML;
+            const summaryElement = document.getElementById('dashboardSummary');
+            if (summaryElement) {
+                summaryElement.innerHTML = summaryHTML;
+                console.log('✅ 요약 테이블 렌더링 완료');
+            } else {
+                console.error('❌ dashboardSummary 요소를 찾을 수 없습니다');
+            }
+            
+            // 차트 제목 업데이트
+            document.getElementById('totalTrendTitle').textContent = `📈 전체 충전기 증감량 추이 (${periodStr})`;
+            document.getElementById('gsTrendTitle').textContent = `🏆 GS차지비 충전기 증감량 추이 (${periodStr})`;
+            document.getElementById('cumulativeTitle').textContent = `📊 완속/급속 충전기 운영 대수 (${periodStr})`;
+            document.getElementById('marketShareTitle').textContent = `📊 상위 5개사 시장점유율 변화 (${periodStr})`;
             
             // 차트 생성 (데이터가 있을 때만)
             const charts = dashboard.charts || {};
-            if (charts.total_trend) createTotalTrendChart(charts.total_trend);
-            if (charts.gs_trend) createGSTrendChart(charts.gs_trend);
-            if (charts.cumulative_chargers) createCumulativeChargersChart(charts.cumulative_chargers);
-            if (charts.top5_market_share) createTop5MarketShareChart(charts.top5_market_share);
+            console.log('📊 차트 데이터:', charts);
+            
+            if (charts.total_trend) {
+                console.log('📈 전체 충전기 증감량 차트 생성');
+                createTotalTrendChart(charts.total_trend);
+            }
+            if (charts.gs_trend) {
+                console.log('📈 GS차지비 차트 생성');
+                createGSTrendChart(charts.gs_trend);
+            }
+            if (charts.cumulative_chargers) {
+                console.log('📈 누적 충전기 차트 생성');
+                createCumulativeChargersChart(charts.cumulative_chargers);
+            }
+            if (charts.top5_market_share) {
+                console.log('📈 상위 5개사 시장점유율 차트 생성');
+                createTop5MarketShareChart(charts.top5_market_share);
+            }
+            
+            console.log('✅ 대시보드 렌더링 완료');
         }
         
         function formatChange(value) {
@@ -714,22 +1109,44 @@
                         data: data.slow_charger_change || [],
                         borderColor: '#48bb78',
                         backgroundColor: 'rgba(72, 187, 120, 0.1)',
+                        borderWidth: 2,
                         tension: 0.4
                     }, {
                         label: '급속 충전기 증감',
                         data: data.fast_charger_change || [],
                         borderColor: '#f56565',
                         backgroundColor: 'rgba(245, 101, 101, 0.1)',
+                        borderWidth: 2,
                         tension: 0.4
                     }]
                 },
                 options: {
                     responsive: true,
                     plugins: {
-                        legend: { position: 'top' }
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed.y;
+                                    const sign = value >= 0 ? '+' : '';
+                                    return context.dataset.label + ': ' + sign + value.toLocaleString() + '기';
+                                }
+                            }
+                        }
                     },
                     scales: {
-                        y: { beginAtZero: true }
+                        y: {
+                            title: {
+                                display: true,
+                                text: '증감량 (기)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    const sign = value >= 0 ? '+' : '';
+                                    return sign + value.toLocaleString();
+                                }
+                            }
+                        }
                     }
                 }
             });
@@ -756,22 +1173,44 @@
                         data: data.slow_charger_change || [],
                         borderColor: '#4299e1',
                         backgroundColor: 'rgba(66, 153, 225, 0.1)',
+                        borderWidth: 2,
                         tension: 0.4
                     }, {
                         label: '급속 충전기 증감',
                         data: data.fast_charger_change || [],
                         borderColor: '#ed8936',
                         backgroundColor: 'rgba(237, 137, 54, 0.1)',
+                        borderWidth: 2,
                         tension: 0.4
                     }]
                 },
                 options: {
                     responsive: true,
                     plugins: {
-                        legend: { position: 'top' }
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed.y;
+                                    const sign = value >= 0 ? '+' : '';
+                                    return context.dataset.label + ': ' + sign + value.toLocaleString() + '기';
+                                }
+                            }
+                        }
                     },
                     scales: {
-                        y: { beginAtZero: true }
+                        y: {
+                            title: {
+                                display: true,
+                                text: '증감량 (기)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    const sign = value >= 0 ? '+' : '';
+                                    return sign + value.toLocaleString();
+                                }
+                            }
+                        }
                     }
                 }
             });
@@ -985,25 +1424,100 @@
         }
         
         async function generateReport() {
-            showStatus('AI 리포트 생성 중... (1-2분 소요)', 'loading');
+            // 선택된 기준월 확인
+            const targetMonth = document.getElementById('reportTargetMonth').value;
+            
+            if (!targetMonth) {
+                alert('기준월을 선택해주세요');
+                return;
+            }
+            
+            console.log('📊 리포트 생성 시작');
+            console.log('📅 기준월:', targetMonth);
+            
+            // 버튼 비활성화
+            const reportBtn = document.getElementById('reportBtn');
+            reportBtn.disabled = true;
+            reportBtn.textContent = '🔄 생성 중...';
+            
+            // 진행도 표시
+            const progressContainer = document.getElementById('reportProgress');
+            const progressBar = document.getElementById('reportProgressBar');
+            const progressText = document.getElementById('reportProgressText');
+            
+            progressContainer.classList.remove('hidden');
+            
+            // 진행도 시뮬레이션
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                if (progress < 90) {
+                    progress += Math.random() * 10;
+                    if (progress > 90) progress = 90;
+                    progressBar.style.width = progress + '%';
+                    progressBar.textContent = Math.floor(progress) + '%';
+                    
+                    if (progress < 30) {
+                        progressText.textContent = '📊 데이터 분석 중...';
+                    } else if (progress < 60) {
+                        progressText.textContent = '🤖 AI 리포트 생성 중...';
+                    } else {
+                        progressText.textContent = '✨ 마무리 중...';
+                    }
+                }
+            }, 500);
             
             try {
-                const response = await fetch('/api/generate-report');
+                // 5분 타임아웃 설정 (AI 리포트 생성은 시간이 오래 걸릴 수 있음)
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 300000); // 5분
+                
+                const response = await fetch('/api/generate-report', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        targetMonth: targetMonth
+                    }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
                 const data = await response.json();
                 
+                clearInterval(progressInterval);
+                
                 if (data.success) {
-                    showStatus('리포트 생성 완료', 'success');
+                    // 진행도 100%
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '100%';
+                    progressText.textContent = '✅ 리포트 생성 완료!';
+                    
+                    setTimeout(() => {
+                        progressContainer.classList.add('hidden');
+                        progressBar.style.width = '0%';
+                    }, 2000);
                     
                     // 리포트 표시 (마크다운 렌더링)
                     document.getElementById('reportContainer').classList.remove('hidden');
                     document.getElementById('executiveSummary').innerHTML = renderMarkdown(data.report.executive_summary || '생성 중...');
                     document.getElementById('cpoAnalysis').innerHTML = renderMarkdown(data.report.cpo_analysis || '데이터 없음');
                     document.getElementById('trendForecast').innerHTML = renderMarkdown(data.report.trend_forecast || '데이터 없음');
+                    
+                    // 버튼 다시 활성화
+                    reportBtn.disabled = false;
+                    reportBtn.textContent = '🤖 AI 리포트 생성';
                 } else {
-                    showStatus('오류: ' + data.error, 'error');
+                    clearInterval(progressInterval);
+                    progressContainer.classList.add('hidden');
+                    alert('오류: ' + data.error);
+                    reportBtn.disabled = false;
+                    reportBtn.textContent = '🤖 AI 리포트 생성';
                 }
             } catch (error) {
-                showStatus('오류: ' + error.message, 'error');
+                clearInterval(progressInterval);
+                progressContainer.classList.add('hidden');
+                alert('오류: ' + error.message);
+                reportBtn.disabled = false;
+                reportBtn.textContent = '🤖 AI 리포트 생성';
             }
         }
         

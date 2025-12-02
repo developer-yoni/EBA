@@ -69,6 +69,7 @@ class AIReportGenerator:
     def invoke_bedrock(self, prompt, context=''):
         """Bedrock 모델 호출 (리포트 생성용)"""
         try:
+            print(f'🔄 Bedrock 모델 호출 시작...', flush=True)
             system_prompt = f"{context}\n\n{prompt}" if context else prompt
             
             payload = {
@@ -91,11 +92,15 @@ class AIReportGenerator:
             )
             
             response_body = json.loads(response['body'].read())
-            return response_body['content'][0]['text']
+            result = response_body['content'][0]['text']
+            print(f'✅ Bedrock 응답 완료 ({len(result)} 자)', flush=True)
+            return result
         
         except Exception as e:
-            print(f'❌ Bedrock 호출 오류: {e}')
-            return None
+            print(f'❌ Bedrock 호출 오류: {e}', flush=True)
+            import traceback
+            traceback.print_exc()
+            return f"리포트 생성 중 오류가 발생했습니다: {str(e)}"
     
     def invoke_bedrock_for_query(self, structured_prompt):
         """Bedrock 모델 호출 (커스텀 질의용 - 구조화된 프롬프트 사용)"""
@@ -405,3 +410,211 @@ class AIReportGenerator:
         
         print('✅ AI 리포트 생성 완료\n')
         return report
+    
+    def generate_gs_chargebee_report(self, target_month, target_insights, range_insights, target_data, range_data, available_months):
+        """GS차지비 관점 AI 리포트 생성"""
+        print(f'🤖 GS차지비 관점 AI 리포트 생성 중... (기준월: {target_month})\n')
+        
+        report = {
+            'executive_summary': None,
+            'cpo_analysis': None,
+            'trend_forecast': None
+        }
+        
+        # GS차지비 데이터 추출
+        gs_target = target_data[target_data['CPO명'] == 'GS차지비'] if 'CPO명' in target_data.columns else None
+        gs_range = range_data[range_data['CPO명'] == 'GS차지비'] if 'CPO명' in range_data.columns else None
+        
+        # GS차지비 정보 문자열 생성
+        gs_info = ""
+        if gs_target is not None and len(gs_target) > 0:
+            gs_row = gs_target.iloc[0]
+            gs_info = f"""
+GS차지비 {target_month} 현황:
+- 순위: {gs_row.get('순위', 'N/A')}위
+- 충전소 수: {gs_row.get('충전소수', 'N/A')}개
+- 완속충전기: {gs_row.get('완속충전기', 'N/A')}기
+- 급속충전기: {gs_row.get('급속충전기', 'N/A')}기
+- 총충전기: {gs_row.get('총충전기', 'N/A')}기
+- 시장점유율: {gs_row.get('시장점유율', 'N/A')}
+- 순위변동: {gs_row.get('순위변동', 'N/A')}
+- 충전소증감: {gs_row.get('충전소증감', 'N/A')}
+- 완속증감: {gs_row.get('완속증감', 'N/A')}
+- 급속증감: {gs_row.get('급속증감', 'N/A')}
+- 총증감: {gs_row.get('총증감', 'N/A')}
+"""
+        
+        # GS차지비 월별 추이
+        gs_trend = ""
+        if gs_range is not None and len(gs_range) > 0:
+            gs_trend = "\nGS차지비 월별 추이:\n"
+            for _, row in gs_range.sort_values('snapshot_month').iterrows():
+                gs_trend += f"- {row.get('snapshot_month', 'N/A')}: 순위 {row.get('순위', 'N/A')}위, 총충전기 {row.get('총충전기', 'N/A')}기, 시장점유율 {row.get('시장점유율', 'N/A')}\n"
+        
+        # 경쟁사 분석 (상위 10개사)
+        competitor_info = ""
+        if 'CPO명' in target_data.columns:
+            top10 = target_data.nlargest(10, '총충전기') if '총충전기' in target_data.columns else target_data.head(10)
+            competitor_info = f"\n{target_month} 상위 10개 CPO:\n"
+            for _, row in top10.iterrows():
+                competitor_info += f"- {row.get('CPO명', 'N/A')}: 순위 {row.get('순위', 'N/A')}위, 총충전기 {row.get('총충전기', 'N/A')}기, 시장점유율 {row.get('시장점유율', 'N/A')}, 총증감 {row.get('총증감', 'N/A')}\n"
+        
+        # 1. 경영진 요약 (GS차지비 관점)
+        print('📝 [1/3] GS차지비 경영진 요약 생성 중...', flush=True)
+        report['executive_summary'] = self._generate_gs_executive_summary(
+            target_month, gs_info, gs_trend, competitor_info, target_insights, available_months
+        )
+        print('✅ [1/3] 경영진 요약 완료', flush=True)
+        
+        # 2. 경쟁 분석 (GS차지비 관점)
+        print('📝 [2/3] GS차지비 경쟁 분석 생성 중...', flush=True)
+        report['cpo_analysis'] = self._generate_gs_competitor_analysis(
+            target_month, gs_info, gs_trend, competitor_info, target_insights, range_insights
+        )
+        print('✅ [2/3] 경쟁 분석 완료', flush=True)
+        
+        # 3. 전략 제안 (GS차지비 관점)
+        print('📝 [3/3] GS차지비 전략 제안 생성 중...', flush=True)
+        report['trend_forecast'] = self._generate_gs_strategy(
+            target_month, gs_info, gs_trend, competitor_info, range_insights, available_months
+        )
+        print('✅ [3/3] 전략 제안 완료', flush=True)
+        
+        print('✅ GS차지비 AI 리포트 생성 완료\n', flush=True)
+        return report
+    
+    def _generate_gs_executive_summary(self, target_month, gs_info, gs_trend, competitor_info, insights, available_months):
+        """GS차지비 경영진 요약"""
+        prompt = f"""
+당신은 GS차지비의 전략 컨설턴트입니다. 다음 데이터를 바탕으로 GS차지비 경영진을 위한 핵심 요약 리포트를 작성해주세요.
+
+## 기준월: {target_month}
+## 분석 가능 기간: {available_months[0]} ~ {available_months[-1]} ({len(available_months)}개월)
+
+## GS차지비 현황
+{gs_info}
+
+## GS차지비 월별 추이
+{gs_trend}
+
+## 경쟁사 현황
+{competitor_info}
+
+## 전체 시장 인사이트
+{str(insights)}
+
+---
+
+**작성 지침:**
+1. GS차지비 관점에서 가장 중요한 인사이트 3가지를 먼저 제시
+2. 시장 내 GS차지비의 포지션 분석
+3. 주요 경쟁사 대비 강점/약점
+4. 즉각적인 주의가 필요한 사항
+
+**Markdown 포맷팅 규칙:**
+- H2: "## 1. 섹션명" (제목 다음 줄은 빈 줄)
+- 글머리 기호: "- " 사용
+- 표: GitHub-style Markdown table
+- 순수 Markdown만 사용 (HTML, LaTeX 금지)
+
+한국어로 작성해주세요.
+"""
+        context = self.retrieve_from_kb('GS차지비 충전 인프라 시장 분석')
+        return self.invoke_bedrock(prompt, context)
+    
+    def _generate_gs_competitor_analysis(self, target_month, gs_info, gs_trend, competitor_info, target_insights, range_insights):
+        """GS차지비 경쟁 분석"""
+        prompt = f"""
+당신은 GS차지비의 경쟁 분석 전문가입니다. 다음 데이터를 바탕으로 GS차지비의 경쟁 환경을 분석해주세요.
+
+## 기준월: {target_month}
+
+## GS차지비 현황
+{gs_info}
+
+## GS차지비 월별 추이
+{gs_trend}
+
+## 경쟁사 현황
+{competitor_info}
+
+## 시장 인사이트
+{str(target_insights)}
+
+---
+
+**작성 지침:**
+1. GS차지비 vs 상위 경쟁사 비교 분석
+2. 시장점유율 변화 추이 분석
+3. 충전기 증설 속도 비교
+4. 경쟁사별 전략 추정 및 GS차지비 대응 방안
+5. 벤치마킹 대상 및 포인트
+
+**포함 내용:**
+- 경쟁사 대비 GS차지비의 강점/약점 표
+- 시장점유율 순위 변동 분석
+- 급속/완속 충전기 비율 비교
+- 성장률 비교
+
+**Markdown 포맷팅 규칙:**
+- H2: "## 1. 섹션명" (제목 다음 줄은 빈 줄)
+- 글머리 기호: "- " 사용
+- 표: GitHub-style Markdown table
+- 순수 Markdown만 사용 (HTML, LaTeX 금지)
+
+한국어로 작성해주세요.
+"""
+        context = self.retrieve_from_kb('충전사업자 CPO 경쟁 분석')
+        return self.invoke_bedrock(prompt, context)
+    
+    def _generate_gs_strategy(self, target_month, gs_info, gs_trend, competitor_info, range_insights, available_months):
+        """GS차지비 전략 제안"""
+        prompt = f"""
+당신은 GS차지비의 전략 기획 전문가입니다. 다음 데이터를 바탕으로 GS차지비의 성장 전략을 제안해주세요.
+
+## 기준월: {target_month}
+## 분석 기간: {available_months[0]} ~ {available_months[-1]}
+
+## GS차지비 현황
+{gs_info}
+
+## GS차지비 월별 추이
+{gs_trend}
+
+## 경쟁사 현황
+{competitor_info}
+
+## 시장 트렌드
+{str(range_insights.get('trend', {}))}
+
+---
+
+**작성 지침:**
+1. 단기 전략 (3개월 이내)
+   - 즉시 실행 가능한 액션 아이템
+   - 시장점유율 방어/확대 방안
+   
+2. 중기 전략 (6개월~1년)
+   - 충전기 증설 계획 제안
+   - 급속/완속 비율 최적화 방안
+   
+3. 장기 전략 (1년 이상)
+   - 시장 포지셔닝 전략
+   - 차별화 전략
+   
+4. 리스크 요인 및 대응 방안
+
+5. KPI 제안
+   - 모니터링해야 할 핵심 지표
+   - 목표 수치 제안
+
+**Markdown 포맷팅 규칙:**
+- H2: "## 1. 섹션명" (제목 다음 줄은 빈 줄)
+- 글머리 기호: "- " 사용
+- 표: GitHub-style Markdown table
+- 순수 Markdown만 사용 (HTML, LaTeX 금지)
+
+한국어로 작성해주세요.
+"""
+        context = self.retrieve_from_kb('충전 인프라 성장 전략')
+        return self.invoke_bedrock(prompt, context)

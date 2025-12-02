@@ -177,7 +177,7 @@ def filter_by_month():
             'error': str(e)
         }), 500
 
-@app.route('/api/dashboard')
+@app.route('/api/dashboard', methods=['GET', 'POST'])
 def get_dashboard():
     """대시보드 데이터 조회 (차트 + 요약)"""
     try:
@@ -187,43 +187,93 @@ def get_dashboard():
                 'error': '먼저 데이터를 로드해주세요'
             }), 400
         
-        # 전체 데이터로 최근 6개월 차트 생성
+        # 선택된 월 목록 가져오기 (POST 요청인 경우)
+        selected_months = []
+        start_month = None
+        end_month = None
+        if request.method == 'POST':
+            data = request.json
+            selected_months = data.get('months', [])
+            start_month = data.get('startMonth')
+            end_month = data.get('endMonth')
+            print(f'📅 선택된 기간: {start_month} ~ {end_month}', flush=True)
+            print(f'📅 선택된 월: {selected_months}', flush=True)
+        
+        # 전체 데이터로 차트 생성
         from data_analyzer import ChargingDataAnalyzer
         full_analyzer = ChargingDataAnalyzer(cache['full_data'])
         
-        # 현재 필터링된 데이터의 요약 정보
-        current_insights = cache.get('insights', {})
-        current_data = cache.get('data')
-        
-        # 선택된 기준월 확인
-        target_month = None
-        if current_data is not None and 'snapshot_month' in current_data.columns:
-            # 현재 선택된 월 (필터링된 데이터의 월)
-            target_month = current_data['snapshot_month'].iloc[0] if len(current_data) > 0 else None
+        # 선택된 월이 있으면 해당 월들로 필터링
+        current_data = None
+        period_summary = None
+        if selected_months:
+            filtered_data = cache['full_data'][cache['full_data']['snapshot_month'].isin(selected_months)]
+            if len(filtered_data) > 0:
+                # 필터링된 데이터로 분석
+                analyzer = ChargingDataAnalyzer(filtered_data)
+                current_insights = analyzer.generate_insights()
+                cache['data'] = filtered_data
+                cache['insights'] = current_insights
+                current_data = filtered_data
+                
+                # 기간 표시
+                if len(selected_months) == 1:
+                    target_month = selected_months[0]
+                else:
+                    target_month = f"{selected_months[0]}~{selected_months[-1]}"
+                
+                # 기간 요약 데이터 생성 (시작월~종료월 증감량)
+                if start_month and end_month:
+                    period_summary = full_analyzer.get_period_summary(start_month, end_month)
+                
+                print(f'📊 선택된 기간: {len(selected_months)}개월 ({target_month})', flush=True)
+            else:
+                current_insights = cache.get('insights', {})
+                target_month = None
+        else:
+            # 현재 필터링된 데이터의 요약 정보
+            current_insights = cache.get('insights', {})
+            current_data = cache.get('data')
+            
+            # 선택된 기준월 확인
+            target_month = None
+            if current_data is not None and 'snapshot_month' in current_data.columns:
+                target_month = current_data['snapshot_month'].iloc[0] if len(current_data) > 0 else None
         
         print(f'📊 대시보드 생성: 기준월={target_month}', flush=True)
         
         # 현재 선택된 월의 요약 테이블 - 엑셀 K2:P4에서 직접 추출
         summary_table = None
         if current_data is not None and len(current_data) > 0:
-            # 현재 선택된 월의 파일 경로 찾기
-            data_source = current_data['data_source'].iloc[0] if 'data_source' in current_data.columns else None
+            # 가장 최근 월의 파일 경로 찾기
+            data_source = current_data['data_source'].iloc[-1] if 'data_source' in current_data.columns else None
             if data_source:
                 loader = ChargingDataLoader()
                 summary_table = loader.extract_summary_data(data_source)
                 print(f'📊 요약 테이블 추출: {summary_table}', flush=True)
         
-        # 대시보드 데이터 구성 (선택한 월 기준 최근 6개월)
+        # period_summary가 있으면 summary_table 대신 사용
+        if period_summary:
+            summary_table = period_summary
+        
+        # 엑셀 N4, O4에서 직접 충전기 증감값 추출
+        loader = ChargingDataLoader()
+        excel_changes = loader.get_all_months_charger_changes()
+        print(f'📊 엑셀에서 추출한 증감값: {len(excel_changes)}개월', flush=True)
+        
+        # 대시보드 데이터 구성 (선택한 기간 기준)
         dashboard = {
             'summary': current_insights.get('summary'),
             'summary_table': summary_table,
             'top_performers': current_insights.get('top_performers'),
             'target_month': target_month,
+            'start_month': start_month,
+            'end_month': end_month,
             'charts': {
-                'total_trend': full_analyzer.get_recent_6months_trend(target_month),
-                'gs_trend': full_analyzer.get_gs_chargebee_trend(target_month),
-                'top5_market_share': full_analyzer.get_top5_market_share_trend(target_month),
-                'cumulative_chargers': full_analyzer.get_cumulative_chargers_trend(target_month)
+                'total_trend': full_analyzer.get_recent_6months_trend(target_month, start_month, end_month, excel_changes),
+                'gs_trend': full_analyzer.get_gs_chargebee_trend(target_month, start_month, end_month),
+                'top5_market_share': full_analyzer.get_top5_market_share_trend(target_month, start_month, end_month),
+                'cumulative_chargers': full_analyzer.get_cumulative_chargers_trend(target_month, start_month, end_month)
             }
         }
         
@@ -240,18 +290,82 @@ def get_dashboard():
             'error': str(e)
         }), 500
 
-@app.route('/api/generate-report')
+@app.route('/api/generate-report', methods=['GET', 'POST'])
 def generate_report():
-    """AI 리포트 생성"""
+    """AI 리포트 생성 (GS차지비 관점)"""
     try:
-        if cache['insights'] is None:
+        target_month = None
+        if request.method == 'POST':
+            data = request.json
+            target_month = data.get('targetMonth')
+            print(f'📅 리포트 생성 - 기준월: {target_month}', flush=True)
+        
+        if cache['full_data'] is None:
             return jsonify({
                 'success': False,
-                'error': '먼저 데이터를 분석해주세요'
+                'error': '먼저 데이터를 로드해주세요'
             }), 400
         
+        if not target_month:
+            return jsonify({
+                'success': False,
+                'error': '기준월을 선택해주세요'
+            }), 400
+        
+        # 기준월 전후 1년 범위 계산
+        from datetime import datetime
+        target_date = datetime.strptime(target_month, '%Y-%m')
+        
+        # 전후 1년 범위의 월 목록 생성
+        all_months = sorted(cache['full_data']['snapshot_month'].unique().tolist())
+        
+        # 기준월 기준 전후 12개월 필터링
+        year = target_date.year
+        month = target_date.month
+        
+        start_year = year - 1
+        start_month_num = month
+        end_year = year + 1
+        end_month_num = month
+        
+        start_range = f'{start_year}-{start_month_num:02d}'
+        end_range = f'{end_year}-{end_month_num:02d}'
+        
+        # 범위 내 사용 가능한 월 필터링
+        available_months = [m for m in all_months if start_range <= m <= end_range]
+        print(f'📅 분석 범위: {start_range} ~ {end_range}', flush=True)
+        print(f'📅 사용 가능한 월: {available_months}', flush=True)
+        
+        # 기준월 데이터 (메인)
+        target_data = cache['full_data'][cache['full_data']['snapshot_month'] == target_month]
+        
+        # 전후 1년 데이터 (참고용)
+        range_data = cache['full_data'][cache['full_data']['snapshot_month'].isin(available_months)]
+        
+        if len(target_data) == 0:
+            return jsonify({
+                'success': False,
+                'error': f'{target_month} 데이터가 없습니다'
+            }), 404
+        
+        # 분석 실행
+        from data_analyzer import ChargingDataAnalyzer
+        target_analyzer = ChargingDataAnalyzer(target_data)
+        range_analyzer = ChargingDataAnalyzer(range_data)
+        
+        target_insights = target_analyzer.generate_insights()
+        range_insights = range_analyzer.generate_insights()
+        
+        # GS차지비 관점 리포트 생성
         generator = AIReportGenerator()
-        report = generator.generate_full_report(cache['insights'])
+        report = generator.generate_gs_chargebee_report(
+            target_month=target_month,
+            target_insights=target_insights,
+            range_insights=range_insights,
+            target_data=target_data,
+            range_data=range_data,
+            available_months=available_months
+        )
         
         # 캐시 저장
         cache['report'] = report
@@ -262,6 +376,8 @@ def generate_report():
         })
     
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)

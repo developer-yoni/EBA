@@ -255,6 +255,70 @@ class ChargingDataLoader:
         
         return df
     
+    def extract_charger_change_from_excel(self, s3_key):
+        """엑셀 파일의 N4, O4에서 완속/급속 충전기 증감값 추출"""
+        try:
+            # 파일 다운로드
+            excel_file = self.download_file(s3_key)
+            if excel_file is None:
+                return None
+            
+            # N4, O4 값 읽기 (0-indexed: N=13, O=14, 행4=인덱스3)
+            df_change = pd.read_excel(
+                excel_file,
+                sheet_name='Sheet1',
+                header=None,
+                skiprows=3,  # 3행 스킵 (0,1,2행)
+                nrows=1,     # 1행만 읽기 (4행 = 인덱스3)
+                usecols='N:O'  # N~O 컬럼
+            )
+            
+            if len(df_change) > 0:
+                slow_change = self._safe_int(df_change.iloc[0, 0])  # N4
+                fast_change = self._safe_int(df_change.iloc[0, 1])  # O4
+                total_change = slow_change + fast_change
+                
+                return {
+                    'slow_charger_change': slow_change,
+                    'fast_charger_change': fast_change,
+                    'total_change': total_change
+                }
+            
+            return None
+            
+        except Exception as e:
+            print(f'❌ 충전기 증감값 추출 오류: {e}')
+            return None
+    
+    def get_all_months_charger_changes(self):
+        """모든 월의 충전기 증감값을 엑셀 N4, O4에서 추출"""
+        files = self.list_available_files()
+        result = []
+        
+        for file_info in files:
+            s3_key = file_info['key']
+            filename = file_info['filename']
+            
+            # 파일명에서 월 추출
+            snapshot_date, snapshot_month = self.parse_snapshot_date_from_filename(filename)
+            
+            if snapshot_month:
+                # 엑셀에서 증감값 추출
+                change_data = self.extract_charger_change_from_excel(s3_key)
+                
+                if change_data:
+                    result.append({
+                        'month': snapshot_month,
+                        'slow_charger_change': change_data['slow_charger_change'],
+                        'fast_charger_change': change_data['fast_charger_change'],
+                        'total_change': change_data['total_change']
+                    })
+                    print(f'📊 {snapshot_month}: 완속 {change_data["slow_charger_change"]:+}, 급속 {change_data["fast_charger_change"]:+}')
+        
+        # 월 기준 정렬
+        result = sorted(result, key=lambda x: x['month'])
+        return result
+    
     def load_latest(self):
         """가장 최신 파일 로드"""
         files = self.list_available_files()

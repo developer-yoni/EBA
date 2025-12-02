@@ -173,36 +173,54 @@ class ChargingDataAnalyzer:
                     return col
         return None
     
-    def get_recent_6months_trend(self, target_month=None):
-        """최근 6개월 충전기 증감량 추이"""
+    def get_recent_6months_trend(self, target_month=None, start_month=None, end_month=None, excel_changes=None):
+        """선택 기간 충전기 증감량 추이 (완속/급속 - 엑셀 N4, O4 기반)"""
+        # 엑셀에서 직접 추출한 데이터가 있으면 사용
+        if excel_changes:
+            # 기간 필터링
+            filtered = excel_changes
+            if start_month and end_month:
+                filtered = [x for x in excel_changes if start_month <= x['month'] <= end_month]
+            elif target_month:
+                filtered = [x for x in excel_changes if x['month'] <= target_month]
+                filtered = sorted(filtered, key=lambda x: x['month'], reverse=True)[:6]
+            
+            filtered = sorted(filtered, key=lambda x: x['month'])
+            
+            return {
+                'months': [x['month'] for x in filtered],
+                'slow_charger_change': [x['slow_charger_change'] for x in filtered],
+                'fast_charger_change': [x['fast_charger_change'] for x in filtered]
+            }
+        
+        # 기존 방식 (DataFrame 기반) - 폴백
         if 'snapshot_month' not in self.df.columns:
             return None
         
         # 월별 집계
         monthly = self.df.groupby('snapshot_month').agg({
             '완속증감': 'sum',
-            '급속증감': 'sum',
-            '총증감': 'sum'
+            '급속증감': 'sum'
         }).reset_index()
         
-        # 기준월 설정 (지정되지 않으면 최신 월)
-        if target_month:
-            # 기준월 이하의 데이터만 필터링
+        # 기간 필터링
+        if start_month and end_month:
+            monthly = monthly[(monthly['snapshot_month'] >= start_month) & 
+                            (monthly['snapshot_month'] <= end_month)]
+        elif target_month:
             monthly = monthly[monthly['snapshot_month'] <= target_month]
+            monthly = monthly.sort_values('snapshot_month', ascending=False).head(6)
         
-        # 최신 6개월만
-        monthly = monthly.sort_values('snapshot_month', ascending=False).head(6)
         monthly = monthly.sort_values('snapshot_month')  # 오름차순 정렬
         
         return {
             'months': monthly['snapshot_month'].tolist(),
             'slow_charger_change': monthly['완속증감'].tolist(),
-            'fast_charger_change': monthly['급속증감'].tolist(),
-            'total_change': monthly['총증감'].tolist()
+            'fast_charger_change': monthly['급속증감'].tolist()
         }
     
-    def get_gs_chargebee_trend(self, target_month=None):
-        """GS차지비 최근 6개월 충전기 증감량 추이"""
+    def get_gs_chargebee_trend(self, target_month=None, start_month=None, end_month=None):
+        """GS차지비 선택 기간 충전기 증감량 추이 (완속/급속만)"""
         if 'snapshot_month' not in self.df.columns or 'CPO명' not in self.df.columns:
             return None
         
@@ -212,8 +230,11 @@ class ChargingDataAnalyzer:
         if len(gs_data) == 0:
             return None
         
-        # 기준월 설정
-        if target_month:
+        # 기간 필터링
+        if start_month and end_month:
+            gs_data = gs_data[(gs_data['snapshot_month'] >= start_month) & 
+                            (gs_data['snapshot_month'] <= end_month)]
+        elif target_month:
             gs_data = gs_data[gs_data['snapshot_month'] <= target_month]
         
         # 월별 집계
@@ -222,8 +243,11 @@ class ChargingDataAnalyzer:
             '급속증감': 'sum'
         }).reset_index()
         
-        # 최신 6개월만
-        monthly = monthly.sort_values('snapshot_month', ascending=False).head(6)
+        if start_month and end_month:
+            pass  # 이미 필터링됨
+        else:
+            monthly = monthly.sort_values('snapshot_month', ascending=False).head(6)
+        
         monthly = monthly.sort_values('snapshot_month')
         
         return {
@@ -232,13 +256,13 @@ class ChargingDataAnalyzer:
             'fast_charger_change': monthly['급속증감'].tolist()
         }
     
-    def get_top5_market_share_trend(self, target_month=None):
-        """상위 5개사 시장점유율 변화 추이 (최근 6개월)"""
+    def get_top5_market_share_trend(self, target_month=None, start_month=None, end_month=None):
+        """상위 5개사 시장점유율 변화 추이 (선택 기간)"""
         if 'snapshot_month' not in self.df.columns or 'CPO명' not in self.df.columns:
             return None
         
-        # 기준월 설정
-        reference_month = target_month if target_month else self.df['snapshot_month'].max()
+        # 기준월 설정 (종료월 기준으로 상위 5개사 선정)
+        reference_month = end_month if end_month else (target_month if target_month else self.df['snapshot_month'].max())
         
         # 기준월 데이터로 상위 5개사 찾기
         reference_data = self.df[self.df['snapshot_month'] == reference_month]
@@ -247,17 +271,18 @@ class ChargingDataAnalyzer:
         
         top5_cpos = reference_data.nlargest(5, '총충전기')['CPO명'].tolist()
         
-        # 기준월 이하의 데이터만 필터링
-        filtered_df = self.df[self.df['snapshot_month'] <= reference_month]
+        # 기간 필터링
+        if start_month and end_month:
+            filtered_df = self.df[(self.df['snapshot_month'] >= start_month) & 
+                                 (self.df['snapshot_month'] <= end_month)]
+            unique_months = sorted(filtered_df['snapshot_month'].unique())
+        else:
+            filtered_df = self.df[self.df['snapshot_month'] <= reference_month]
+            unique_months = sorted(filtered_df['snapshot_month'].unique(), reverse=True)[:6]
+            unique_months = sorted(unique_months)
         
         # 상위 5개사의 월별 시장점유율
-        result = {'months': [], 'cpos': {}}
-        
-        # 최근 6개월
-        unique_months = sorted(filtered_df['snapshot_month'].unique(), reverse=True)[:6]
-        unique_months = sorted(unique_months)  # 오름차순
-        
-        result['months'] = unique_months
+        result = {'months': unique_months, 'cpos': {}}
         
         for cpo in top5_cpos:
             cpo_data = filtered_df[filtered_df['CPO명'] == cpo]
@@ -275,8 +300,8 @@ class ChargingDataAnalyzer:
         
         return result
     
-    def get_cumulative_chargers_trend(self, target_month=None):
-        """최근 6개월 완속/급속 충전기 누적 수량"""
+    def get_cumulative_chargers_trend(self, target_month=None, start_month=None, end_month=None):
+        """선택 기간 완속/급속 충전기 운영 대수 (월별 막대그래프용)"""
         if 'snapshot_month' not in self.df.columns:
             return None
         
@@ -287,12 +312,14 @@ class ChargingDataAnalyzer:
             '총충전기': 'sum'
         }).reset_index()
         
-        # 기준월 설정
-        if target_month:
+        # 기간 필터링
+        if start_month and end_month:
+            monthly = monthly[(monthly['snapshot_month'] >= start_month) & 
+                            (monthly['snapshot_month'] <= end_month)]
+        elif target_month:
             monthly = monthly[monthly['snapshot_month'] <= target_month]
+            monthly = monthly.sort_values('snapshot_month', ascending=False).head(6)
         
-        # 최신 6개월만
-        monthly = monthly.sort_values('snapshot_month', ascending=False).head(6)
         monthly = monthly.sort_values('snapshot_month')  # 오름차순 정렬
         
         return {
@@ -300,6 +327,61 @@ class ChargingDataAnalyzer:
             'slow_chargers': monthly['완속충전기'].tolist(),
             'fast_chargers': monthly['급속충전기'].tolist(),
             'total_chargers': monthly['총충전기'].tolist()
+        }
+    
+    def get_period_summary(self, start_month, end_month):
+        """선택 기간의 요약 데이터 (첫 행: 종료월 기준 전체, 두 번째 행: 기간 증감량)"""
+        if 'snapshot_month' not in self.df.columns:
+            return None
+        
+        # 종료월 데이터 (전체 현황)
+        end_data = self.df[self.df['snapshot_month'] == end_month]
+        if len(end_data) == 0:
+            return None
+        
+        # 시작월 데이터 (증감량 계산용)
+        start_data = self.df[self.df['snapshot_month'] == start_month]
+        
+        # 종료월 기준 전체 현황
+        total = {
+            'cpos': int(len(end_data)),
+            'stations': int(end_data['충전소수'].sum()) if '충전소수' in end_data.columns else 0,
+            'slow_chargers': int(end_data['완속충전기'].sum()) if '완속충전기' in end_data.columns else 0,
+            'fast_chargers': int(end_data['급속충전기'].sum()) if '급속충전기' in end_data.columns else 0,
+            'total_chargers': int(end_data['총충전기'].sum()) if '총충전기' in end_data.columns else 0
+        }
+        
+        # 기간 증감량 계산 (종료월 - 시작월)
+        if len(start_data) > 0:
+            start_total = {
+                'cpos': int(len(start_data)),
+                'stations': int(start_data['충전소수'].sum()) if '충전소수' in start_data.columns else 0,
+                'slow_chargers': int(start_data['완속충전기'].sum()) if '완속충전기' in start_data.columns else 0,
+                'fast_chargers': int(start_data['급속충전기'].sum()) if '급속충전기' in start_data.columns else 0,
+                'total_chargers': int(start_data['총충전기'].sum()) if '총충전기' in start_data.columns else 0
+            }
+            change = {
+                'cpos': total['cpos'] - start_total['cpos'],
+                'stations': total['stations'] - start_total['stations'],
+                'slow_chargers': total['slow_chargers'] - start_total['slow_chargers'],
+                'fast_chargers': total['fast_chargers'] - start_total['fast_chargers'],
+                'total_chargers': total['total_chargers'] - start_total['total_chargers']
+            }
+        else:
+            # 시작월 데이터가 없으면 종료월의 당월 증감량 사용
+            change = {
+                'cpos': 0,
+                'stations': int(end_data['충전소증감'].sum()) if '충전소증감' in end_data.columns else 0,
+                'slow_chargers': int(end_data['완속증감'].sum()) if '완속증감' in end_data.columns else 0,
+                'fast_chargers': int(end_data['급속증감'].sum()) if '급속증감' in end_data.columns else 0,
+                'total_chargers': int(end_data['총증감'].sum()) if '총증감' in end_data.columns else 0
+            }
+        
+        return {
+            'total': total,
+            'change': change,
+            'start_month': start_month,
+            'end_month': end_month
         }
     
     def generate_insights(self):
