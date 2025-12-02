@@ -280,17 +280,200 @@ def custom_query():
                 'error': '질의를 입력해주세요'
             }), 400
         
+        print(f'\n🔍 커스텀 질의 시작: "{query}"', flush=True)
+        
         generator = AIReportGenerator()
         
-        # Knowledge Base 검색
-        context = generator.retrieve_from_kb(query)
+        # Knowledge Base 검색 (배경 지식)
+        print(f'📚 Knowledge Base 검색 중...', flush=True)
+        kb_context = generator.retrieve_from_kb(query)
+        print(f'📊 KB 컨텍스트 길이: {len(kb_context)} 자', flush=True)
         
-        # 현재 인사이트 추가
+        # 선택된 기준월 정보
+        selected_month = "전체"
+        if cache.get('data') is not None and 'snapshot_month' in cache['data'].columns:
+            selected_month = cache['data']['snapshot_month'].iloc[0] if len(cache['data']) > 0 else "전체"
+        
+        print(f'📅 선택된 기준월: {selected_month}', flush=True)
+        
+        # 현재 로드된 DataFrame을 테이블 형태로 변환
+        table_data = ""
+        if cache.get('data') is not None:
+            df = cache['data']
+            # 주요 컬럼만 선택하여 테이블 생성
+            relevant_cols = ['CPO명', '순위', '충전소수', '완속충전기', '급속충전기', '총충전기', '시장점유율', '순위변동', '충전소증감', '완속증감', '급속증감', '총증감']
+            available_cols = [col for col in relevant_cols if col in df.columns]
+            
+            if len(available_cols) > 0:
+                # NaN 값 제거하고 유효한 데이터만 추출
+                df_clean = df[available_cols].dropna(subset=['CPO명'])
+                # 상위 50개만 (너무 많으면 토큰 초과)
+                df_top = df_clean.head(50)
+                # 테이블 형태로 변환
+                table_data = df_top.to_string(index=False)
+                print(f'📊 테이블 데이터: {len(df_top)} 행, {len(available_cols)} 컬럼', flush=True)
+        
+        # 현재 분석된 인사이트 데이터
+        insights_data = ""
         if cache['insights']:
-            context += f"\n\n현재 분석 데이터:\n{json.dumps(cache['insights'], ensure_ascii=False, indent=2)}"
+            insights_data = json.dumps(cache['insights'], ensure_ascii=False, indent=2)
+            print(f'📊 인사이트 데이터 길이: {len(insights_data)} 자', flush=True)
         
-        # Bedrock 응답 생성
-        answer = generator.invoke_bedrock(query, context)
+        # 구조화된 프롬프트 생성
+        structured_prompt = f"""
+당신은 한국 전기차 충전 인프라 데이터 분석 전문가 Agent입니다.
+
+## 사용자 질문
+{query}
+
+## 현재 선택된 기준월
+{selected_month}
+
+## 실제 데이터 테이블 (최우선 참고 - 이 데이터가 가장 정확합니다!)
+
+**중요: 아래 테이블은 {selected_month} 기준의 실제 데이터입니다. 반드시 이 테이블에서 정확한 값을 찾아 답변하세요.**
+
+```
+{table_data}
+```
+
+**컬럼 설명:**
+- CPO명: 충전사업자 이름
+- 순위: 시장점유율 기반 순위
+- 충전소수: 운영 중인 충전소 개수
+- 완속충전기: 완속 충전기 개수
+- 급속충전기: 급속 충전기 개수
+- 총충전기: 총 충전기 개수 (TTL)
+- 시장점유율: 시장점유율 (%)
+- 순위변동: 전월 대비 순위 변동
+- 충전소증감: 전월 대비 충전소 증감량
+- 완속증감: 전월 대비 완속 충전기 증감량
+- 급속증감: 전월 대비 급속 충전기 증감량
+- 총증감: 전월 대비 총 충전기 증감량
+
+## 질의 처리 방식 (단계별 사고 - Chain of Thought)
+
+**반드시 다음 단계를 순서대로 수행하세요:**
+
+### Step 1: 질의 분석
+- 사용자가 요청한 것: [무엇을 찾는가?]
+- 필요한 컬럼: [어떤 컬럼을 봐야 하는가?]
+- 정렬 기준: [어떤 순서로 정렬하는가?]
+- 개수 제한: [몇 개를 보여줘야 하는가?]
+
+### Step 2: 테이블에서 데이터 찾기
+- 위의 "실제 데이터 테이블"을 한 줄씩 읽으면서
+- 해당 컬럼의 값을 확인
+- 정렬 기준에 따라 상위 N개 선택
+
+### Step 3: 선택된 데이터 검증
+- 선택한 각 행의 CPO명과 해당 컬럼 값을 명시
+- 예: "1위: 한국전력공사, 급속충전기: 12,345기"
+
+### Step 4: 최종 답변 작성
+- 검증된 데이터로 자연어 답변 생성
+- 표 형식으로 정리
+
+**예시:**
+
+질문: "2025년 10월에 급속충전기가 많은 순서대로 top 3 충전사업자를 알려줘"
+
+Step 1 분석:
+- 요청: 급속충전기가 많은 CPO
+- 필요 컬럼: CPO명, 급속충전기
+- 정렬: 급속충전기 내림차순
+- 개수: 3개
+
+Step 2 테이블 조회:
+- 테이블에서 "급속충전기" 컬럼을 확인
+- 값이 큰 순서대로 정렬
+- 상위 3개 행 선택
+
+Step 3 검증:
+- 1위: [CPO명], 급속충전기: [정확한 숫자]
+- 2위: [CPO명], 급속충전기: [정확한 숫자]
+- 3위: [CPO명], 급속충전기: [정확한 숫자]
+
+Step 4 답변:
+[표 형식으로 정리된 답변]
+
+## 추가 참고 데이터
+
+**분석 인사이트:**
+{insights_data}
+
+**Knowledge Base 참고 (보조 자료):**
+{kb_context}
+
+## 답변 작성 규칙
+
+**중요: 반드시 위의 "단계별 사고" 과정을 따라 답변하세요!**
+
+1. **데이터 소스 우선순위**
+   - **최우선**: "실제 데이터 테이블" - 이 테이블의 값이 절대적으로 정확합니다
+   - Knowledge Base는 참고만 하고, 구체적인 숫자는 테이블에서 가져오세요
+
+2. **정확한 값 추출 방법**
+   - 테이블을 한 줄씩 읽으면서 해당 컬럼 값 확인
+   - 숫자는 테이블에 표시된 그대로 사용 (쉼표 포함)
+   - 절대 추측하거나 계산하지 말 것
+   - 테이블에 없는 데이터는 "확인할 수 없습니다" 명시
+
+3. **답변 형식**
+   
+   반드시 다음 형식으로 답변:
+   
+   ```
+   ## [질문 요약]
+   
+   [핵심 답변 1-2문장]
+   
+   | 순위 | CPO명 | [요청 컬럼] | 기타 정보 |
+   |------|-------|------------|----------|
+   | 1 | [정확한 이름] | [정확한 숫자] | [추가 정보] |
+   | 2 | [정확한 이름] | [정확한 숫자] | [추가 정보] |
+   | 3 | [정확한 이름] | [정확한 숫자] | [추가 정보] |
+   
+   **데이터 출처**: {selected_month} 실제 분석 데이터
+   ```
+
+4. **금지 사항**
+   - Knowledge Base의 다른 월 데이터 사용 금지
+   - 테이블에 없는 CPO 언급 금지
+   - 숫자 반올림, 근사값 사용 금지
+   - HTML, LaTeX, 코드블록 사용 금지
+
+5. **답변 예시**
+   - 핵심 답변 (1-2문장, 정확한 수치 포함)
+   - 상세 데이터 (표 형식)
+   - 추가 인사이트 (있는 경우)
+
+5. **답변 예시**
+
+질문: "2025년 10월 급속 충전기를 많이 운영하는 충전사업자 top 3 알려줘"
+
+올바른 답변:
+```
+## 2025년 10월 급속충전기 보유 상위 3개 CPO
+
+2025년 10월 기준, 급속충전기를 가장 많이 운영하는 충전사업자는 한국전력공사(15,234기), 환경부(12,567기), SK시그넷(8,901기) 순입니다.
+
+| 순위 | CPO명 | 급속충전기 | 시장점유율 |
+|------|-------|-----------|-----------|
+| 1 | 한국전력공사 | 15,234 | 31.2% |
+| 2 | 환경부 | 12,567 | 25.8% |
+| 3 | SK시그넷 | 8,901 | 18.3% |
+
+**데이터 출처**: 2025-10 실제 분석 데이터
+```
+
+**중요**: 위 예시의 숫자는 가상입니다. 반드시 실제 테이블에서 정확한 값을 찾아 사용하세요!
+
+한국어로 명확하고 간결하게 답변해주세요.
+"""
+        
+        # Bedrock 응답 생성 (컨텍스트 없이 구조화된 프롬프트만 전달)
+        answer = generator.invoke_bedrock_for_query(structured_prompt)
         
         return jsonify({
             'success': True,

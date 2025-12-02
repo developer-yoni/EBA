@@ -23,6 +23,8 @@ class AIReportGenerator:
     def retrieve_from_kb(self, query):
         """Knowledge Base에서 관련 정보 검색"""
         try:
+            print(f'🔍 Knowledge Base 검색 시작: "{query}"', flush=True)
+            
             response = self.kb_client.retrieve(
                 knowledgeBaseId=Config.KNOWLEDGE_BASE_ID,
                 retrievalQuery={'text': query},
@@ -34,19 +36,38 @@ class AIReportGenerator:
             )
             
             results = response.get('retrievalResults', [])
+            print(f'📊 검색 결과 개수: {len(results)}', flush=True)
+            
+            if len(results) == 0:
+                print('⚠️ Knowledge Base에서 검색 결과가 없습니다', flush=True)
+                return ''
+            
+            # 각 결과의 메타데이터와 내용 로깅
+            for i, r in enumerate(results):
+                score = r.get('score', 0)
+                location = r.get('location', {})
+                s3_location = location.get('s3Location', {})
+                uri = s3_location.get('uri', 'N/A')
+                content_preview = r.get('content', {}).get('text', '')[:200]
+                print(f'  [{i+1}] Score: {score:.4f}, URI: {uri}', flush=True)
+                print(f'      Preview: {content_preview}...', flush=True)
+            
             context = '\n\n'.join([
-                f"[참고자료 {i+1}]\n{r.get('content', {}).get('text', '')}"
+                f"[참고자료 {i+1}] (관련도: {r.get('score', 0):.2f})\n출처: {r.get('location', {}).get('s3Location', {}).get('uri', 'N/A')}\n\n{r.get('content', {}).get('text', '')}"
                 for i, r in enumerate(results)
             ])
             
+            print(f'✅ Knowledge Base 컨텍스트 생성 완료 (총 {len(context)} 자)', flush=True)
             return context
         
         except Exception as e:
-            print(f'⚠️ Knowledge Base 검색 오류: {e}')
+            print(f'❌ Knowledge Base 검색 오류: {e}', flush=True)
+            import traceback
+            traceback.print_exc()
             return ''
     
     def invoke_bedrock(self, prompt, context=''):
-        """Bedrock 모델 호출"""
+        """Bedrock 모델 호출 (리포트 생성용)"""
         try:
             system_prompt = f"{context}\n\n{prompt}" if context else prompt
             
@@ -58,6 +79,35 @@ class AIReportGenerator:
                     {
                         'role': 'user',
                         'content': system_prompt
+                    }
+                ]
+            }
+            
+            response = self.bedrock_client.invoke_model(
+                modelId=Config.MODEL_ID,
+                contentType='application/json',
+                accept='application/json',
+                body=json.dumps(payload)
+            )
+            
+            response_body = json.loads(response['body'].read())
+            return response_body['content'][0]['text']
+        
+        except Exception as e:
+            print(f'❌ Bedrock 호출 오류: {e}')
+            return None
+    
+    def invoke_bedrock_for_query(self, structured_prompt):
+        """Bedrock 모델 호출 (커스텀 질의용 - 구조화된 프롬프트 사용)"""
+        try:
+            payload = {
+                'anthropic_version': Config.ANTHROPIC_VERSION,
+                'max_tokens': Config.MAX_TOKENS,
+                'temperature': 0.3,  # 더 정확한 답변을 위해 낮은 temperature
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': structured_prompt
                     }
                 ]
             }
