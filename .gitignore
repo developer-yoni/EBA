@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Node
+node_modules/
+
+# 환경 변수
+.env
+
+# 로그
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 출력 파일
+*.json
+*.xlsx
+!requirements.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
