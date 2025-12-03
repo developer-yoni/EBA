@@ -42,8 +42,22 @@ class QueryAnalyzer:
             )
             
             results = response.get('retrievalResults', [])
+            
+            # RAG 검색 결과 상세 로깅
+            print(f'   └─ 🔍 RAG 검색 결과: {len(results)}개 문서 검색됨', flush=True)
+            
             if not results:
+                print(f'      └─ ⚠️ 관련 문서 없음', flush=True)
                 return ''
+            
+            for i, r in enumerate(results):
+                score = r.get('score', 0)
+                location = r.get('location', {})
+                s3_uri = location.get('s3Location', {}).get('uri', 'N/A')
+                content_preview = r.get('content', {}).get('text', '')[:100]
+                print(f'      [{i+1}] 관련도: {score:.4f}', flush=True)
+                print(f'          소스: {s3_uri}', flush=True)
+                print(f'          내용: {content_preview}...', flush=True)
             
             context = '\n\n'.join([
                 f"[참고자료 {i+1}] (관련도: {r.get('score', 0):.2f})\n{r.get('content', {}).get('text', '')}"
@@ -52,7 +66,7 @@ class QueryAnalyzer:
             
             return context
         except Exception as e:
-            print(f'❌ KB 검색 오류: {e}')
+            print(f'   └─ ❌ KB 검색 오류: {e}', flush=True)
             return ''
     
     def analyze_query_intent(self, query: str, available_data: dict) -> dict:
@@ -384,60 +398,162 @@ JSON만 출력하세요.
         except Exception as e:
             return f"답변 생성 중 오류가 발생했습니다: {str(e)}"
     
+    def _log_separator(self, title: str):
+        """로그 구분선 출력"""
+        print(f'\n{"="*60}', flush=True)
+        print(f'🤖 {title}', flush=True)
+        print(f'{"="*60}', flush=True)
+    
+    def _log_step(self, step_num: int, title: str, details: dict = None):
+        """단계별 로그 출력"""
+        print(f'\n📌 Step {step_num}: {title}', flush=True)
+        if details:
+            for key, value in details.items():
+                if isinstance(value, list) and len(value) > 5:
+                    print(f'   └─ {key}: {value[:5]}... (총 {len(value)}개)', flush=True)
+                elif isinstance(value, str) and len(value) > 200:
+                    print(f'   └─ {key}: {value[:200]}... (총 {len(value)}자)', flush=True)
+                else:
+                    print(f'   └─ {key}: {value}', flush=True)
+    
     def process_query(self, query: str, df, full_df) -> dict:
         """전체 질의 처리 파이프라인"""
-        print(f'\n🔍 질의 처리 시작: "{query}"', flush=True)
+        self._log_separator(f'Agent 질의 처리 시작')
+        print(f'📝 사용자 질의: "{query}"', flush=True)
         
-        # 1. 사용 가능한 데이터 정보 수집
+        # ========================================
+        # Step 1: 메모리 데이터 수집
+        # ========================================
         available_data = {
             'available_months': sorted(full_df['snapshot_month'].unique().tolist()) if 'snapshot_month' in full_df.columns else [],
             'available_cpos': full_df['CPO명'].unique().tolist() if 'CPO명' in full_df.columns else [],
             'available_columns': list(full_df.columns)
         }
-        print(f'📊 사용 가능한 월: {len(available_data["available_months"])}개', flush=True)
         
-        # 2. RAG - Knowledge Base 검색
-        print(f'📚 Knowledge Base 검색 중...', flush=True)
+        self._log_step(1, '메모리 데이터 수집 (S3 캐시)', {
+            '전체 데이터 행 수': len(full_df),
+            '현재 필터 데이터 행 수': len(df) if df is not None else 0,
+            '사용 가능한 월': available_data['available_months'],
+            '사용 가능한 CPO 수': len(available_data['available_cpos']),
+            '컬럼 목록': available_data['available_columns']
+        })
+        
+        # ========================================
+        # Step 2: RAG - Knowledge Base 검색
+        # ========================================
+        self._log_step(2, 'RAG - Knowledge Base 검색', {
+            'Knowledge Base ID': Config.KNOWLEDGE_BASE_ID,
+            '검색 쿼리': query,
+            '검색 결과 수 설정': Config.KB_NUMBER_OF_RESULTS
+        })
+        
         kb_context = self.retrieve_from_kb(query)
-        print(f'📊 KB 컨텍스트: {len(kb_context)} 자', flush=True)
         
-        # 3. 질의 의도 분석 (프롬프트 엔지니어링)
-        print(f'🧠 질의 의도 분석 중...', flush=True)
+        print(f'   └─ KB 검색 결과: {len(kb_context)} 자 컨텍스트 획득', flush=True)
+        if kb_context:
+            # KB 결과 요약 출력
+            kb_preview = kb_context[:300].replace('\n', ' ')
+            print(f'   └─ KB 컨텍스트 미리보기: {kb_preview}...', flush=True)
+        
+        # ========================================
+        # Step 3: 프롬프트 엔지니어링 - 질의 의도 분석
+        # ========================================
+        self._log_step(3, '프롬프트 엔지니어링 - 질의 의도 분석', {
+            'LLM 모델': Config.MODEL_ID,
+            '분석 목적': '차트 필요 여부, 차트 타입, 데이터 필터 조건 판단'
+        })
+        
         intent = self.analyze_query_intent(query, available_data)
-        print(f'📊 분석 결과: needs_chart={intent.get("needs_chart")}, type={intent.get("chart_type")}', flush=True)
         
-        # 4. 차트 필요 여부에 따른 처리
+        print(f'   └─ 🧠 LLM 분석 결과:', flush=True)
+        print(f'      ├─ 차트 필요: {intent.get("needs_chart")}', flush=True)
+        print(f'      ├─ 차트 타입: {intent.get("chart_type")}', flush=True)
+        print(f'      ├─ 차트 제목: {intent.get("chart_title")}', flush=True)
+        print(f'      ├─ 분석 유형: {intent.get("analysis_type")}', flush=True)
+        print(f'      └─ 데이터 필터: {intent.get("data_filter")}', flush=True)
+        
+        # ========================================
+        # Step 4: 도구 선택 및 실행
+        # ========================================
         if intent.get('needs_chart'):
-            print(f'📈 차트 데이터 추출 중...', flush=True)
+            self._log_step(4, '도구 선택: 코드 인터프리터 (차트 생성)', {
+                '선택된 도구': 'ChartGenerator (matplotlib 기반)',
+                '차트 타입': intent.get('chart_type'),
+                '실행 방식': 'Python 코드 동적 생성 → subprocess 실행 → Base64 이미지 반환'
+            })
             
             # 차트 데이터 추출
+            print(f'\n   📊 데이터 추출 중...', flush=True)
             chart_data = self.extract_chart_data(full_df, intent)
             
             if chart_data.get('error'):
+                print(f'   └─ ❌ 데이터 추출 실패: {chart_data["error"]}', flush=True)
                 return {
                     'success': False,
                     'error': chart_data['error'],
                     'has_chart': False
                 }
             
-            print(f'📊 데이터 포인트: {len(chart_data.get("values", []))}개', flush=True)
+            # 데이터 추출 결과 로깅
+            is_multi = chart_data.get('multi_series', False)
+            if is_multi:
+                series_count = len(chart_data.get('series', []))
+                data_points = len(chart_data.get('labels', []))
+                print(f'   └─ ✅ 다중 시리즈 데이터 추출 완료', flush=True)
+                print(f'      ├─ 시리즈 수: {series_count}개', flush=True)
+                print(f'      ├─ 데이터 포인트: {data_points}개', flush=True)
+                for s in chart_data.get('series', []):
+                    print(f'      ├─ {s["name"]}: {s["values"][:3]}...', flush=True)
+            else:
+                data_points = len(chart_data.get('values', []))
+                print(f'   └─ ✅ 단일 시리즈 데이터 추출 완료', flush=True)
+                print(f'      ├─ 데이터 포인트: {data_points}개', flush=True)
+                print(f'      ├─ 라벨: {chart_data.get("labels", [])[:5]}...', flush=True)
+                print(f'      └─ 값: {chart_data.get("values", [])[:5]}...', flush=True)
             
-            # 5. 코드 인터프리터로 차트 생성
-            print(f'🎨 차트 생성 중...', flush=True)
+            # ========================================
+            # Step 5: 코드 인터프리터 실행 (차트 생성)
+            # ========================================
+            self._log_step(5, '코드 인터프리터 실행 - 차트 생성', {
+                '실행 방식': 'matplotlib Python 코드 생성 → subprocess 실행',
+                '출력 형식': 'Base64 인코딩 PNG 이미지'
+            })
+            
             chart_result = self.generate_chart(intent, chart_data)
             
             if not chart_result.get('success'):
-                print(f'⚠️ 차트 생성 실패: {chart_result.get("error")}', flush=True)
-                # 차트 실패해도 텍스트 답변은 생성
+                print(f'   └─ ⚠️ 차트 생성 실패: {chart_result.get("error")}', flush=True)
                 chart_result = {'success': False, 'image': None}
             else:
-                print(f'✅ 차트 생성 완료', flush=True)
+                img_size = len(chart_result.get('image', '')) if chart_result.get('image') else 0
+                print(f'   └─ ✅ 차트 생성 성공 (이미지 크기: {img_size:,} bytes)', flush=True)
             
-            # 6. 답변 생성
-            print(f'💬 답변 생성 중...', flush=True)
+            # ========================================
+            # Step 6: LLM 답변 생성
+            # ========================================
+            self._log_step(6, 'LLM 답변 생성', {
+                'LLM 모델': Config.MODEL_ID,
+                '입력 데이터': f'차트 데이터 + KB 컨텍스트 ({len(kb_context)}자)',
+                '답변 유형': '차트 분석 + 인사이트'
+            })
+            
             answer = self.generate_answer_with_chart(
                 query, df, kb_context, intent, chart_data, chart_result
             )
+            
+            print(f'   └─ ✅ 답변 생성 완료 ({len(answer)}자)', flush=True)
+            
+            # ========================================
+            # 처리 완료 요약
+            # ========================================
+            self._log_separator('Agent 처리 완료')
+            print(f'📊 처리 요약:', flush=True)
+            print(f'   ├─ 질의: {query[:50]}...', flush=True)
+            print(f'   ├─ 차트 생성: {"성공" if chart_result.get("success") else "실패"}', flush=True)
+            print(f'   ├─ 차트 타입: {intent.get("chart_type")}', flush=True)
+            print(f'   ├─ 데이터 소스: S3 캐시 (메모리)', flush=True)
+            print(f'   ├─ RAG 사용: {"예" if kb_context else "아니오"} ({len(kb_context)}자)', flush=True)
+            print(f'   └─ 답변 길이: {len(answer)}자', flush=True)
             
             return {
                 'success': True,
@@ -450,17 +566,32 @@ JSON만 출력하세요.
                 'data_summary': {
                     'labels': chart_data.get('labels', []),
                     'values': chart_data.get('values', []),
-                    'count': len(chart_data.get('values', []))
+                    'series': chart_data.get('series', []),
+                    'count': data_points
                 }
             }
         
         else:
-            # 차트 불필요 - 기존 텍스트 답변만
-            print(f'💬 텍스트 답변 생성 중...', flush=True)
+            # ========================================
+            # Step 4: 도구 선택 - 텍스트 답변 (차트 불필요)
+            # ========================================
+            self._log_step(4, '도구 선택: 텍스트 답변 (Legacy)', {
+                '선택된 도구': 'AIReportGenerator (기존 텍스트 답변)',
+                '이유': '차트가 필요하지 않은 질의로 판단됨',
+                'LLM 분석 결과': intent.get('explanation', 'N/A')
+            })
+            
+            self._log_separator('Agent 처리 완료 (텍스트 모드)')
+            print(f'📊 처리 요약:', flush=True)
+            print(f'   ├─ 질의: {query[:50]}...', flush=True)
+            print(f'   ├─ 차트 생성: 불필요', flush=True)
+            print(f'   ├─ 데이터 소스: S3 캐시 (메모리)', flush=True)
+            print(f'   └─ RAG 사용: {"예" if kb_context else "아니오"} ({len(kb_context)}자)', flush=True)
+            
             return {
                 'success': True,
                 'query': query,
-                'answer': None,  # 기존 로직 사용
+                'answer': None,
                 'has_chart': False,
-                'use_legacy': True  # 기존 custom_query 로직 사용 플래그
+                'use_legacy': True
             }
