@@ -1526,7 +1526,19 @@
             if (!query) return;
             
             const resultDiv = document.getElementById('queryResult');
-            resultDiv.innerHTML = '<p style="color: #666;">답변 생성 중...</p>';
+            resultDiv.innerHTML = `
+                <div style="text-align: center; padding: 20px;">
+                    <div class="loading-spinner" style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <p style="color: #666; margin-top: 10px;">🔍 질의 분석 및 답변 생성 중...</p>
+                    <p style="color: #999; font-size: 12px;">차트가 필요한 질문인 경우 그래프도 함께 생성됩니다</p>
+                </div>
+                <style>
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
             
             try {
                 const response = await fetch('/api/query', {
@@ -1541,11 +1553,29 @@
                     // 답변을 마크다운으로 렌더링
                     const renderedAnswer = renderMarkdown(data.answer);
                     
+                    // 차트가 있는 경우
+                    let chartHtml = '';
+                    if (data.has_chart && data.chart && data.chart.image) {
+                        chartHtml = `
+                            <div style="margin: 20px 0; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                <h4 style="color: #667eea; margin-bottom: 15px;">📊 ${data.chart.title || '데이터 시각화'}</h4>
+                                <img src="${data.chart.image}" alt="차트" style="max-width: 100%; height: auto; border-radius: 4px;" />
+                                ${data.data_summary ? `
+                                    <div style="margin-top: 10px; padding: 10px; background: #f7fafc; border-radius: 4px; font-size: 12px; color: #666;">
+                                        <strong>데이터 요약:</strong> ${data.data_summary.count}개 데이터 포인트
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }
+                    
                     resultDiv.innerHTML = `
                         <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-top: 10px;">
                             <strong style="color: #667eea;">질문:</strong> ${data.query}<br><br>
+                            ${chartHtml}
                             <strong style="color: #48bb78;">답변:</strong><br>
                             <div class="report-content" style="margin-top: 10px;">${renderedAnswer}</div>
+                            ${data.has_chart ? '<p style="font-size: 11px; color: #999; margin-top: 10px;">💡 차트는 코드 인터프리터로 동적 생성되었습니다</p>' : ''}
                         </div>
                     `;
                 } else {

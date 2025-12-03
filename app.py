@@ -6,6 +6,7 @@ import json
 from data_loader import ChargingDataLoader
 from data_analyzer import ChargingDataAnalyzer
 from ai_report_generator import AIReportGenerator
+from query_analyzer import QueryAnalyzer
 
 app = Flask(__name__)
 
@@ -385,7 +386,7 @@ def generate_report():
 
 @app.route('/api/query', methods=['POST'])
 def custom_query():
-    """커스텀 질의"""
+    """커스텀 질의 - 차트 생성 기능 포함"""
     try:
         data = request.json
         query = data.get('query')
@@ -398,285 +399,150 @@ def custom_query():
         
         print(f'\n🔍 커스텀 질의 시작: "{query}"', flush=True)
         
-        generator = AIReportGenerator()
+        # 데이터 확인
+        if cache.get('full_data') is None:
+            return jsonify({
+                'success': False,
+                'error': '먼저 데이터를 로드해주세요'
+            }), 400
         
-        # Knowledge Base 검색 (배경 지식)
-        print(f'📚 Knowledge Base 검색 중...', flush=True)
-        kb_context = generator.retrieve_from_kb(query)
-        print(f'📊 KB 컨텍스트 길이: {len(kb_context)} 자', flush=True)
+        # QueryAnalyzer로 질의 처리 (RAG + 프롬프트 엔지니어링 + 코드 인터프리터)
+        analyzer = QueryAnalyzer()
+        result = analyzer.process_query(
+            query=query,
+            df=cache.get('data'),
+            full_df=cache.get('full_data')
+        )
         
-        # 선택된 기준월 정보
-        selected_month = "전체"
-        if cache.get('data') is not None and 'snapshot_month' in cache['data'].columns:
-            selected_month = cache['data']['snapshot_month'].iloc[0] if len(cache['data']) > 0 else "전체"
+        # 차트 생성이 필요 없거나 기존 로직 사용 플래그가 있는 경우
+        if result.get('use_legacy'):
+            print(f'📝 기존 텍스트 답변 로직 사용', flush=True)
+            return _legacy_query_handler(query)
         
-        print(f'📅 선택된 기준월: {selected_month}', flush=True)
-        
-        # 현재 선택된 월의 DataFrame을 테이블 형태로 변환
-        current_month_table = ""
-        if cache.get('data') is not None:
-            df = cache['data']
-            # 주요 컬럼만 선택하여 테이블 생성
-            relevant_cols = ['CPO명', '순위', '충전소수', '완속충전기', '급속충전기', '총충전기', '시장점유율', '순위변동', '충전소증감', '완속증감', '급속증감', '총증감']
-            available_cols = [col for col in relevant_cols if col in df.columns]
+        # 차트 포함 응답
+        if result.get('success'):
+            response_data = {
+                'success': True,
+                'query': query,
+                'answer': result.get('answer'),
+                'has_chart': result.get('has_chart', False)
+            }
             
-            if len(available_cols) > 0:
-                # NaN 값 제거하고 유효한 데이터만 추출
-                df_clean = df[available_cols].dropna(subset=['CPO명'])
-                # 상위 50개만 (너무 많으면 토큰 초과)
-                df_top = df_clean.head(50)
-                # 테이블 형태로 변환
-                current_month_table = df_top.to_string(index=False)
-                print(f'📊 현재 월 테이블: {len(df_top)} 행, {len(available_cols)} 컬럼', flush=True)
-        
-        # 전체 기간 데이터 (기간별 비교용)
-        all_months_summary = ""
-        available_months = []
-        if cache.get('full_data') is not None:
-            df_full = cache['full_data']
-            if 'snapshot_month' in df_full.columns:
-                available_months = sorted(df_full['snapshot_month'].unique().tolist())
-                print(f'📅 사용 가능한 월: {available_months}', flush=True)
-                
-                # 각 월별로 주요 CPO의 데이터 요약 (상위 20개만)
-                relevant_cols_with_month = ['snapshot_month', 'CPO명', '충전소수', '완속충전기', '급속충전기', '총충전기', '시장점유율']
-                available_cols_full = [col for col in relevant_cols_with_month if col in df_full.columns]
-                
-                if len(available_cols_full) > 0:
-                    df_full_clean = df_full[available_cols_full].dropna(subset=['CPO명'])
-                    # 각 월별 상위 20개 CPO만 추출
-                    df_summary = df_full_clean.groupby('snapshot_month').head(20)
-                    all_months_summary = df_summary.to_string(index=False, max_rows=200)
-                    print(f'📊 전체 기간 요약: {len(df_summary)} 행', flush=True)
-        
-        # 현재 분석된 인사이트 데이터
-        insights_data = ""
-        if cache['insights']:
-            insights_data = json.dumps(cache['insights'], ensure_ascii=False, indent=2)
-            print(f'📊 인사이트 데이터 길이: {len(insights_data)} 자', flush=True)
-        
-        # 구조화된 프롬프트 생성
-        structured_prompt = f"""
-당신은 한국 전기차 충전 인프라 데이터 분석 전문가 Agent입니다.
-
-## 사용자 질문
-{query}
-
-## 사용 가능한 데이터
-
-### 1. 현재 선택된 월 데이터 ({selected_month})
-**단일 월 조회 시 사용**
-
-```
-{current_month_table}
-```
-
-### 2. 전체 기간 데이터 (기간별 비교용)
-**사용 가능한 월: {', '.join(available_months)}**
-**기간별 비교 조회 시 사용**
-
-```
-{all_months_summary}
-```
-
-**컬럼 설명:**
-- snapshot_month: 기준 연월 (YYYY-MM 형식)
-- CPO명: 충전사업자 이름
-- 순위: 시장점유율 기반 순위
-- 충전소수: 운영 중인 충전소 개수
-- 완속충전기: 완속 충전기 개수
-- 급속충전기: 급속 충전기 개수
-- 총충전기: 총 충전기 개수 (TTL)
-- 시장점유율: 시장점유율 (%)
-- 순위변동: 전월 대비 순위 변동
-- 충전소증감: 전월 대비 충전소 증감량
-- 완속증감: 전월 대비 완속 충전기 증감량
-- 급속증감: 전월 대비 급속 충전기 증감량
-- 총증감: 전월 대비 총 충전기 증감량
-
-## 질의 처리 방식 (단계별 사고 - Chain of Thought)
-
-**먼저 질의 유형을 판단하세요:**
-
-### 질의 유형 A: 단일 월 조회
-- "2025년 10월에 급속충전기가 많은 top 3"
-- "2025년 9월 한국전력공사의 충전소 수"
-→ **"현재 선택된 월 데이터" 사용**
-
-### 질의 유형 B: 기간별 비교 조회
-- "2025년 1월부터 10월까지 완속충전기 증가량이 많은 top 5"
-- "2024년 12월과 2025년 10월 비교"
-→ **"전체 기간 데이터" 사용**
-
----
-
-### 유형 A: 단일 월 조회 처리
-
-**Step 1: 질의 분석**
-- 요청 월: [YYYY-MM]
-- 요청 항목: [무엇을 찾는가?]
-- 필요 컬럼: [어떤 컬럼?]
-- 정렬 기준: [어떤 순서?]
-- 개수: [몇 개?]
-
-**Step 2: 현재 월 테이블 조회**
-- 해당 컬럼 값 확인
-- 정렬 후 상위 N개 선택
-
-**Step 3: 검증 및 답변**
-
----
-
-### 유형 B: 기간별 비교 조회 처리
-
-**Step 1: 질의 분석**
-- 시작 월: [YYYY-MM]
-- 종료 월: [YYYY-MM]
-- 비교 항목: [어떤 컬럼?]
-- 계산 방식: [증가량 = 종료월 값 - 시작월 값]
-
-**Step 2: 전체 기간 데이터에서 두 시점 조회**
-
-예: "2025년 1월부터 10월까지 완속충전기 증가량 top 5"
-
-1. 전체 기간 데이터에서 snapshot_month = "2025-01" 필터링
-   - 각 CPO의 완속충전기 값 추출 → 1월_값
-   
-2. 전체 기간 데이터에서 snapshot_month = "2025-10" 필터링
-   - 각 CPO의 완속충전기 값 추출 → 10월_값
-   
-3. 각 CPO별로 증가량 계산
-   - 증가량 = 10월_값 - 1월_값
-   
-4. 증가량 기준으로 내림차순 정렬
-   
-5. 상위 5개 선택
-
-**Step 3: 검증**
-- 각 CPO의 1월 값, 10월 값, 증가량을 명시
-- 예: "한국전력공사: 1월 10,000기 → 10월 12,000기 (증가량: +2,000기)"
-
-**Step 4: 답변 작성**
-- 표 형식으로 정리
-
----
-
-### 예시 1: 단일 월 조회
-
-질문: "2025년 10월에 급속충전기가 많은 top 3"
-
-Step 1: 단일 월 조회 → 현재 월 테이블 사용
-Step 2: 급속충전기 컬럼 확인, 내림차순 정렬, 상위 3개
-Step 3: 답변 작성
-
----
-
-### 예시 2: 기간별 비교
-
-질문: "2025년 1월부터 10월까지 완속충전기 증가량 top 5"
-
-Step 1: 기간별 비교 → 전체 기간 데이터 사용
-Step 2: 
-- 2025-01 데이터에서 각 CPO의 완속충전기 값
-- 2025-10 데이터에서 각 CPO의 완속충전기 값
-- 증가량 = 10월 - 1월
-Step 3: 증가량 기준 정렬, 상위 5개
-Step 4: 답변 작성
-- 2위: [CPO명], 급속충전기: [정확한 숫자]
-- 3위: [CPO명], 급속충전기: [정확한 숫자]
-
-Step 4 답변:
-[표 형식으로 정리된 답변]
-
-## 추가 참고 데이터
-
-**분석 인사이트:**
-{insights_data}
-
-**Knowledge Base 참고 (보조 자료):**
-{kb_context}
-
-## 답변 작성 규칙
-
-**중요: 반드시 위의 "단계별 사고" 과정을 따라 답변하세요!**
-
-1. **데이터 소스 우선순위**
-   - **최우선**: "실제 데이터 테이블" - 이 테이블의 값이 절대적으로 정확합니다
-   - Knowledge Base는 참고만 하고, 구체적인 숫자는 테이블에서 가져오세요
-
-2. **정확한 값 추출 방법**
-   - 테이블을 한 줄씩 읽으면서 해당 컬럼 값 확인
-   - 숫자는 테이블에 표시된 그대로 사용 (쉼표 포함)
-   - 절대 추측하거나 계산하지 말 것
-   - 테이블에 없는 데이터는 "확인할 수 없습니다" 명시
-
-3. **답변 형식**
-   
-   반드시 다음 형식으로 답변:
-   
-   ```
-   ## [질문 요약]
-   
-   [핵심 답변 1-2문장]
-   
-   | 순위 | CPO명 | [요청 컬럼] | 기타 정보 |
-   |------|-------|------------|----------|
-   | 1 | [정확한 이름] | [정확한 숫자] | [추가 정보] |
-   | 2 | [정확한 이름] | [정확한 숫자] | [추가 정보] |
-   | 3 | [정확한 이름] | [정확한 숫자] | [추가 정보] |
-   
-   **데이터 출처**: {selected_month} 실제 분석 데이터
-   ```
-
-4. **금지 사항**
-   - Knowledge Base의 다른 월 데이터 사용 금지
-   - 테이블에 없는 CPO 언급 금지
-   - 숫자 반올림, 근사값 사용 금지
-   - HTML, LaTeX, 코드블록 사용 금지
-
-5. **답변 예시**
-   - 핵심 답변 (1-2문장, 정확한 수치 포함)
-   - 상세 데이터 (표 형식)
-   - 추가 인사이트 (있는 경우)
-
-5. **답변 예시**
-
-질문: "2025년 10월 급속 충전기를 많이 운영하는 충전사업자 top 3 알려줘"
-
-올바른 답변:
-```
-## 2025년 10월 급속충전기 보유 상위 3개 CPO
-
-2025년 10월 기준, 급속충전기를 가장 많이 운영하는 충전사업자는 한국전력공사(15,234기), 환경부(12,567기), SK시그넷(8,901기) 순입니다.
-
-| 순위 | CPO명 | 급속충전기 | 시장점유율 |
-|------|-------|-----------|-----------|
-| 1 | 한국전력공사 | 15,234 | 31.2% |
-| 2 | 환경부 | 12,567 | 25.8% |
-| 3 | SK시그넷 | 8,901 | 18.3% |
-
-**데이터 출처**: 2025-10 실제 분석 데이터
-```
-
-**중요**: 위 예시의 숫자는 가상입니다. 반드시 실제 테이블에서 정확한 값을 찾아 사용하세요!
-
-한국어로 명확하고 간결하게 답변해주세요.
-"""
-        
-        # Bedrock 응답 생성 (컨텍스트 없이 구조화된 프롬프트만 전달)
-        answer = generator.invoke_bedrock_for_query(structured_prompt)
-        
-        return jsonify({
-            'success': True,
-            'query': query,
-            'answer': answer
-        })
+            # 차트 이미지가 있으면 추가
+            if result.get('has_chart') and result.get('chart_image'):
+                response_data['chart'] = {
+                    'image': result.get('chart_image'),
+                    'type': result.get('chart_type'),
+                    'title': result.get('chart_title')
+                }
+                response_data['data_summary'] = result.get('data_summary')
+            
+            return jsonify(response_data)
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', '질의 처리 실패')
+            }), 500
     
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+
+
+def _legacy_query_handler(query):
+    """기존 텍스트 기반 질의 처리 (차트 불필요 시)"""
+    generator = AIReportGenerator()
+    
+    # Knowledge Base 검색 (배경 지식)
+    print(f'📚 Knowledge Base 검색 중...', flush=True)
+    kb_context = generator.retrieve_from_kb(query)
+    print(f'📊 KB 컨텍스트 길이: {len(kb_context)} 자', flush=True)
+    
+    # 선택된 기준월 정보
+    selected_month = "전체"
+    if cache.get('data') is not None and 'snapshot_month' in cache['data'].columns:
+        selected_month = cache['data']['snapshot_month'].iloc[0] if len(cache['data']) > 0 else "전체"
+    
+    print(f'📅 선택된 기준월: {selected_month}', flush=True)
+    
+    # 현재 선택된 월의 DataFrame을 테이블 형태로 변환
+    current_month_table = ""
+    if cache.get('data') is not None:
+        df = cache['data']
+        relevant_cols = ['CPO명', '순위', '충전소수', '완속충전기', '급속충전기', '총충전기', '시장점유율', '순위변동', '충전소증감', '완속증감', '급속증감', '총증감']
+        available_cols = [col for col in relevant_cols if col in df.columns]
+        
+        if len(available_cols) > 0:
+            df_clean = df[available_cols].dropna(subset=['CPO명'])
+            df_top = df_clean.head(50)
+            current_month_table = df_top.to_string(index=False)
+            print(f'📊 현재 월 테이블: {len(df_top)} 행, {len(available_cols)} 컬럼', flush=True)
+    
+    # 전체 기간 데이터
+    all_months_summary = ""
+    available_months = []
+    if cache.get('full_data') is not None:
+        df_full = cache['full_data']
+        if 'snapshot_month' in df_full.columns:
+            available_months = sorted(df_full['snapshot_month'].unique().tolist())
+            print(f'📅 사용 가능한 월: {available_months}', flush=True)
+            
+            relevant_cols_with_month = ['snapshot_month', 'CPO명', '충전소수', '완속충전기', '급속충전기', '총충전기', '시장점유율']
+            available_cols_full = [col for col in relevant_cols_with_month if col in df_full.columns]
+            
+            if len(available_cols_full) > 0:
+                df_full_clean = df_full[available_cols_full].dropna(subset=['CPO명'])
+                df_summary = df_full_clean.groupby('snapshot_month').head(20)
+                all_months_summary = df_summary.to_string(index=False, max_rows=200)
+                print(f'📊 전체 기간 요약: {len(df_summary)} 행', flush=True)
+    
+    # 인사이트 데이터
+    insights_data = ""
+    if cache['insights']:
+        insights_data = json.dumps(cache['insights'], ensure_ascii=False, indent=2)
+    
+    # 구조화된 프롬프트
+    structured_prompt = f"""
+당신은 한국 전기차 충전 인프라 데이터 분석 전문가입니다.
+
+## 사용자 질문
+{query}
+
+## 현재 선택된 월 데이터 ({selected_month})
+```
+{current_month_table}
+```
+
+## 전체 기간 데이터
+사용 가능한 월: {', '.join(available_months)}
+```
+{all_months_summary}
+```
+
+## Knowledge Base 참고
+{kb_context}
+
+## 답변 규칙
+1. 실제 데이터 테이블의 값을 최우선으로 사용
+2. 정확한 숫자만 사용 (추측 금지)
+3. 표 형식으로 명확하게 답변
+4. 한국어로 간결하게 답변
+
+한국어로 답변해주세요.
+"""
+    
+    answer = generator.invoke_bedrock_for_query(structured_prompt)
+    
+    return jsonify({
+        'success': True,
+        'query': query,
+        'answer': answer,
+        'has_chart': False
+    })
 
 def initialize_data():
     """앱 시작 시 자동으로 모든 데이터 로드"""
