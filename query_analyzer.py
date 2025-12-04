@@ -7,6 +7,7 @@
 import json
 import re
 import boto3
+import pandas as pd
 from config import Config
 from chart_generator import ChartGenerator
 
@@ -70,57 +71,248 @@ class QueryAnalyzer:
             return ''
     
     def analyze_query_intent(self, query: str, available_data: dict) -> dict:
-        """질의 의도 분석 - 차트 필요 여부 판단"""
+        """질의 의도 분석 - Multi-Step Reasoning + Semantic Column Matching"""
         
         analysis_prompt = f"""
-당신은 데이터 분석 질의를 분석하는 전문가입니다.
+당신은 데이터 분석 질의를 정확하게 분석하는 전문가입니다.
+사용자의 질의를 분석하여 어떤 데이터를 어떤 형식으로 보여줄지 결정합니다.
+
+## 🚨 매우 중요: 출력 형식 결정 규칙
+
+### 시각화(차트/그래프)가 필요한 경우 (needs_chart: true)
+다음 키워드가 **명시적으로** 포함된 경우에만 차트를 생성합니다:
+- "그래프", "차트", "시각화", "그려줘", "막대", "원형", "파이", "선형", "라인"
+- 예: "막대그래프로 보여줘", "원형 차트로 그려줘", "시각화해줘"
+
+### 표(테이블) 형식으로 답변하는 경우 (needs_chart: false) - 기본값!
+다음 경우에는 차트 없이 **표(테이블) 형식**으로 답변합니다:
+- "표", "테이블", "목록", "리스트" 키워드가 있는 경우
+- 시각화 관련 키워드가 **전혀 없는** 경우 (기본값)
+- "표로 보여줘", "목록으로 알려줘" 등
+
+### 표도 차트도 필요 없는 경우 (needs_chart: false, show_table: false)
+- "표 없이", "표 말고", "텍스트로만", "간단히" 등의 표현이 있는 경우
+
+⚠️ 주의: "원형 표"는 "원형 그래프"가 아닙니다! "표"가 포함되면 테이블 형식입니다.
 
 ## 사용자 질의
 {query}
 
-## 사용 가능한 데이터
-- 사용 가능한 월: {available_data.get('available_months', [])}
-- 사용 가능한 CPO: {available_data.get('available_cpos', [])[:20]}... (상위 20개)
-- 사용 가능한 컬럼: {available_data.get('available_columns', [])}
+## 데이터베이스 스키마 (사용 가능한 컬럼)
 
-## 분석 작업
-다음 JSON 형식으로 질의를 분석해주세요:
+### 기본 수량 컬럼 (절대값)
+| 컬럼명 | 설명 | 데이터 타입 |
+|--------|------|------------|
+| 충전소수 | 충전소 개수 | 정수 (예: 1000, 2000) |
+| 완속충전기 | 완속충전기 개수 | 정수 (예: 5000, 10000) |
+| 급속충전기 | 급속충전기 개수 | 정수 (예: 1000, 2000) |
+| 총충전기 | 총충전기 개수 | 정수 (예: 6000, 12000) |
+
+### 증감 컬럼 (전월 대비 변화량, 양수/음수)
+| 컬럼명 | 설명 | 데이터 타입 |
+|--------|------|------------|
+| 충전소증감 | 전월 대비 충전소 증감량 | 정수 (예: +50, -10) |
+| 완속증감 | 전월 대비 완속충전기 증감량 | 정수 (예: +100, -50) |
+| 급속증감 | 전월 대비 급속충전기 증감량 | 정수 (예: +30, -20) |
+| 총증감 | 전월 대비 총충전기 증감량 | 정수 (예: +130, -70) |
+
+### 비율/순위 컬럼
+| 컬럼명 | 설명 | 데이터 타입 |
+|--------|------|------------|
+| 시장점유율 | 전체 대비 점유율 | 백분율 (예: 15.5%) |
+| 순위 | 시장점유율 순위 | 정수 (예: 1, 2, 3) |
+| 순위변동 | 전월 대비 순위 변동 | 정수 (예: +1, -2) |
+
+### 식별 컬럼
+| 컬럼명 | 설명 |
+|--------|------|
+| CPO명 | 충전사업자명 (예: GS차지비, 파워큐브) |
+| snapshot_month | 기준 연월 (예: 2025-10) |
+
+## ⚠️ 중요: 데이터에 없는 항목
+다음 항목들은 데이터베이스에 **직접 존재하지 않습니다**:
+- "증가률", "증가율", "성장률" → 계산 필요 (증감량 / 이전값 * 100)
+- "감소률", "감소율" → 계산 필요
+- "점유율 변동" → 직접 컬럼 없음
+
+## 사용 가능한 데이터
+- 기간: {available_data.get('available_months', [])}
+- CPO 수: {len(available_data.get('available_cpos', []))}개
+- 실제 컬럼: {available_data.get('available_columns', [])}
+
+---
+## Multi-Step Reasoning 분석 과정
+
+### Step 1: 질의 핵심 요소 추출
+사용자 질의에서 다음을 식별하세요:
+- 대상: 무엇에 대한 질의인가? (완속충전기, 급속충전기, 충전소 등)
+- 측정값: 어떤 값을 보고 싶은가? (개수, 증감량, 증가률, 점유율 등)
+- 조건: 기간, 특정 CPO, 상위/하위 몇 개 등
+- 출력형식: 
+  - "chart" = 차트/그래프 키워드가 명시적으로 있음
+  - "table" = 표/테이블 키워드가 있거나, 시각화 키워드가 없음 (기본값)
+  - "text_only" = 표도 필요 없다고 명시함
+
+### Step 2: 측정값 → 컬럼 매핑 (Semantic Matching)
+사용자가 요청한 "측정값"을 실제 컬럼에 매핑합니다.
+
+**직접 매핑 가능한 경우:**
+| 사용자 표현 | 매핑 컬럼 | 확신도 |
+|------------|----------|--------|
+| "완속충전기 개수", "완속 수" | 완속충전기 | HIGH |
+| "완속충전기 증감량", "완속 증가량" | 완속증감 | HIGH |
+| "급속충전기 개수" | 급속충전기 | HIGH |
+| "급속충전기 증감량" | 급속증감 | HIGH |
+| "시장점유율", "점유율" | 시장점유율 | HIGH |
+| "충전소 수", "충전소 개수" | 충전소수 | HIGH |
+| "충전소 증감량" | 충전소증감 | HIGH |
+
+**계산이 필요한 경우 (데이터에 직접 없음):**
+| 사용자 표현 | 필요한 계산 | 확신도 |
+|------------|------------|--------|
+| "증가률", "증가율", "성장률" | (증감량/이전값)*100 | REQUIRES_CALCULATION |
+| "감소률" | 계산 필요 | REQUIRES_CALCULATION |
+
+**매핑 불가능한 경우:**
+- 컬럼을 특정할 수 없는 모호한 표현
+- 데이터에 없는 항목 요청
+
+### Step 3: 확신도 판정
+- HIGH: 명확하게 컬럼 매핑 가능
+- MEDIUM: 유사한 컬럼이 있지만 확인 필요
+- LOW: 모호하여 사용자 확인 필요
+- REQUIRES_CALCULATION: 계산이 필요한 파생 지표
+- NOT_FOUND: 해당 데이터 없음
+
+### Step 4: 최종 결정
+- 확신도가 HIGH면 → 차트 생성 진행
+- 확신도가 MEDIUM이면 → 가장 유사한 컬럼으로 진행하되 설명 추가
+- 확신도가 LOW/NOT_FOUND면 → 사용자에게 명확화 요청
+- REQUIRES_CALCULATION이면 → 계산 로직 적용 또는 대안 제시
+
+---
+## 출력 형식
 
 ```json
 {{
-    "needs_chart": true/false,
-    "chart_type": "line" | "bar" | "pie" | "area" | null,
-    "chart_title": "차트 제목",
-    "data_filter": {{
-        "cpo_name": "CPO명 또는 null",
-        "start_month": "YYYY-MM 또는 null",
-        "end_month": "YYYY-MM 또는 null",
-        "column": "조회할 컬럼명 (단일) 또는 [컬럼1, 컬럼2] (다중 비교)"
+    "reasoning": {{
+        "step1_extraction": {{
+            "target": "대상 (예: 완속충전기)",
+            "metric": "측정값 (예: 증가률)",
+            "conditions": "조건 (예: 2025-10, top 3)",
+            "visualization": "시각화 타입"
+        }},
+        "step2_column_mapping": {{
+            "user_expression": "사용자가 사용한 표현",
+            "mapped_column": "매핑된 컬럼명 또는 null",
+            "mapping_reason": "매핑 이유 설명"
+        }},
+        "step3_confidence": {{
+            "level": "HIGH | MEDIUM | LOW | REQUIRES_CALCULATION | NOT_FOUND",
+            "reason": "확신도 판정 이유"
+        }},
+        "step4_decision": {{
+            "action": "PROCEED | CLARIFY | CALCULATE",
+            "explanation": "결정 설명"
+        }}
     }},
-    "analysis_type": "trend" | "comparison" | "ranking" | "single",
-    "explanation": "분석 설명"
+    "needs_chart": true | false,
+    "show_table": true | false,
+    "output_format": "chart | table | text_only",
+    "needs_clarification": true | false,
+    "clarification_message": "사용자에게 요청할 명확화 메시지 (needs_clarification이 true일 때)",
+    "chart_type": "line | bar | pie | area | none",
+    "chart_title": "차트/표 제목",
+    "data_filter": {{
+        "cpo_name": null,
+        "start_month": "YYYY-MM",
+        "end_month": "YYYY-MM",
+        "sort_column": "정렬 기준 컬럼",
+        "display_column": "표시할 값 컬럼",
+        "limit": 숫자,
+        "sort_order": "desc | asc"
+    }},
+    "chart_config": {{
+        "x_axis": "CPO명",
+        "y_axis": "표시할 데이터명",
+        "y_axis_type": "value | percentage | calculated_rate",
+        "y_axis_label": "y축 라벨"
+    }},
+    "analysis_type": "ranking | trend | comparison",
+    "calculation_required": {{
+        "needed": true | false,
+        "type": "growth_rate | null",
+        "base_column": "기준 컬럼",
+        "change_column": "변화량 컬럼"
+    }}
 }}
 ```
 
-## 중요: 다중 컬럼 비교
-- 사용자가 "완속충전기와 급속충전기를 비교", "두 가지를 하나의 그래프로" 등 요청 시
-- column을 배열로 지정: ["완속증감", "급속증감"] 또는 ["완속충전기", "급속충전기"]
+## 예시
 
-## 차트 타입 결정 기준
-- line: 시간에 따른 추이, 트렌드 분석, 다중 시리즈 비교
-- bar: 항목별 비교, 순위
-- pie: 비율, 점유율
-- area: 누적 추이
+### 예시 1: "완속충전기 증가량 top 5" (표 형식 - 시각화 키워드 없음)
+```json
+{{
+    "reasoning": {{
+        "step1_extraction": {{"output_format": "table"}},
+        "step2_column_mapping": {{"mapped_column": "완속증감"}}
+    }},
+    "needs_chart": false,
+    "show_table": true,
+    "output_format": "table",
+    "chart_type": "none",
+    "data_filter": {{"sort_column": "완속증감", "display_column": "완속증감", "limit": 5}}
+}}
+```
 
-## 컬럼명 매핑
-- 완속충전기, 완속: "완속충전기"
-- 급속충전기, 급속: "급속충전기"
-- 총충전기, 전체충전기, TTL: "총충전기"
-- 충전소, 충전소수: "충전소수"
-- 시장점유율, 점유율: "시장점유율"
-- 완속증감, 완속 증감량: "완속증감"
-- 급속증감, 급속 증감량: "급속증감"
-- 총증감: "총증감"
+### 예시 2: "완속충전기 증가량 top 5 막대그래프로 그려줘" (차트 필요)
+```json
+{{
+    "reasoning": {{
+        "step1_extraction": {{"output_format": "chart"}}
+    }},
+    "needs_chart": true,
+    "show_table": true,
+    "output_format": "chart",
+    "chart_type": "bar",
+    "data_filter": {{"sort_column": "완속증감", "display_column": "완속증감", "limit": 5}}
+}}
+```
+
+### 예시 3: "완속충전기 증가률 top 3를 표로 보여줘" (표 형식 + 계산 필요)
+```json
+{{
+    "reasoning": {{
+        "step1_extraction": {{"output_format": "table"}},
+        "step3_confidence": {{"level": "REQUIRES_CALCULATION"}}
+    }},
+    "needs_chart": false,
+    "show_table": true,
+    "output_format": "table",
+    "chart_type": "none",
+    "calculation_required": {{"needed": true, "type": "growth_rate", "base_column": "완속충전기", "change_column": "완속증감"}}
+}}
+```
+
+### 예시 4: "완속충전기 증가률 top 3 간단히 알려줘" (텍스트만)
+```json
+{{
+    "needs_chart": false,
+    "show_table": false,
+    "output_format": "text_only"
+}}
+```
+
+### 예시 5: "원형 표로 보여줘" (표 형식! 차트 아님!)
+```json
+{{
+    "reasoning": {{"step1_extraction": {{"output_format": "table", "note": "원형 표는 차트가 아닌 테이블 형식"}}}},
+    "needs_chart": false,
+    "show_table": true,
+    "output_format": "table",
+    "chart_type": "none"
+}}
+```
 
 JSON만 출력하세요.
 """
@@ -128,7 +320,7 @@ JSON만 출력하세요.
         try:
             payload = {
                 'anthropic_version': Config.ANTHROPIC_VERSION,
-                'max_tokens': 1024,
+                'max_tokens': 2048,  # Chain of Thought 응답을 위해 증가
                 'temperature': 0.1,
                 'messages': [{'role': 'user', 'content': analysis_prompt}]
             }
@@ -154,38 +346,162 @@ JSON만 출력하세요.
             print(f'❌ 질의 분석 오류: {e}')
             return {'needs_chart': False, 'analysis_type': 'single'}
     
+    def _calculate_y_values(self, top_df, col, y_axis_type, full_df, calculation_info=None):
+        """y축 값 계산 (절대값, 점유율, 또는 증가률)"""
+        
+        # 증가률 계산이 필요한 경우
+        if y_axis_type == 'calculated_rate' and calculation_info:
+            calc_type = calculation_info.get('type')
+            base_col = calculation_info.get('base_column')
+            change_col = calculation_info.get('change_column')
+            
+            if calc_type == 'growth_rate' and base_col in top_df.columns and change_col in top_df.columns:
+                # 증가률 = (증감량 / (현재값 - 증감량)) * 100
+                # 현재값 - 증감량 = 이전 월 값
+                values = []
+                for idx, row in top_df.iterrows():
+                    current_val = row[base_col]
+                    change_val = row[change_col]
+                    prev_val = current_val - change_val
+                    
+                    if prev_val > 0:
+                        rate = (change_val / prev_val) * 100
+                        values.append(round(rate, 2))
+                    else:
+                        # 이전 값이 0이면 증가률 계산 불가 (무한대 방지)
+                        values.append(0 if change_val == 0 else 100.0)
+                
+                print(f'      ├─ 증가률 계산: {change_col}/{base_col}-{change_col}*100', flush=True)
+                return values
+        
+        # 점유율 계산
+        if y_axis_type == 'percentage':
+            total = full_df[col].sum()
+            if total > 0:
+                values = [(v / total * 100) for v in top_df[col].tolist()]
+                print(f'      ├─ 점유율 계산: 전체 합계 {total:,}, 점유율로 변환', flush=True)
+                return [round(v, 2) for v in values]
+            return top_df[col].tolist()
+        
+        # 절대값 그대로 반환
+        return top_df[col].tolist()
+    
+    def _validate_column_exists(self, col: str, df) -> tuple:
+        """컬럼 존재 여부 확인 및 유사 컬럼 추천"""
+        if col in df.columns:
+            return True, col, None
+        
+        # 유사 컬럼 찾기
+        similar_cols = []
+        col_lower = col.lower()
+        for c in df.columns:
+            c_lower = c.lower()
+            # 부분 문자열 매칭
+            if col_lower in c_lower or c_lower in col_lower:
+                similar_cols.append(c)
+            # 키워드 매칭
+            keywords = ['충전', '증감', '점유', '순위']
+            for kw in keywords:
+                if kw in col_lower and kw in c_lower:
+                    if c not in similar_cols:
+                        similar_cols.append(c)
+        
+        return False, None, similar_cols
+    
     def extract_chart_data(self, df, intent: dict) -> dict:
-        """DataFrame에서 차트 데이터 추출"""
+        """DataFrame에서 차트 데이터 추출 (Text-to-SQL 방식)"""
         try:
             data_filter = intent.get('data_filter', {})
+            chart_config = intent.get('chart_config', {})
+            
             cpo_name = data_filter.get('cpo_name')
             start_month = data_filter.get('start_month')
             end_month = data_filter.get('end_month')
-            column = data_filter.get('column', '총충전기')
+            
+            # Text-to-SQL: sort_column과 display_column 분리
+            sort_column = data_filter.get('sort_column')  # ORDER BY 컬럼
+            display_column = data_filter.get('display_column')  # SELECT 컬럼 (y축 값)
+            column = data_filter.get('column', '총충전기')  # 기존 호환성
+            
+            # sort_column이 없으면 column 사용 (기존 호환성)
+            if not sort_column:
+                sort_column = column
+            if not display_column:
+                display_column = column
+            
+            limit = data_filter.get('limit')
+            sort_order = data_filter.get('sort_order', 'desc')
+            
+            # 차트 축 설정
+            y_axis_type = chart_config.get('y_axis_type', 'value')
+            y_axis_label = chart_config.get('y_axis_label', '값')
+            x_axis = chart_config.get('x_axis', 'CPO명')
+            
+            # limit이 None이면 기본값 10, 명시되면 해당 값 사용
+            result_limit = limit if limit is not None else 10
+            
+            print(f'      ├─ 정렬 컬럼 (ORDER BY): {sort_column}', flush=True)
+            print(f'      ├─ 표시 컬럼 (SELECT): {display_column}', flush=True)
+            print(f'      ├─ 개수 제한 (LIMIT): {limit} → 적용값: {result_limit}', flush=True)
+            print(f'      ├─ 정렬 순서: {sort_order}', flush=True)
+            print(f'      ├─ Y축 타입: {y_axis_type} ({y_axis_label})', flush=True)
+            print(f'      └─ X축: {x_axis}', flush=True)
             
             # 컬럼명 정규화 함수
             def normalize_column(col):
                 if col is None:
                     return '총충전기'
-                column_mapping = {
-                    '완속': '완속충전기',
+                col_str = str(col)
+                
+                # 정확한 매칭 우선 (더 구체적인 키를 먼저 체크)
+                exact_mapping = {
                     '완속증감': '완속증감',
-                    '급속': '급속충전기',
                     '급속증감': '급속증감',
-                    '총': '총충전기',
                     '총증감': '총증감',
-                    '충전소': '충전소수',
                     '충전소증감': '충전소증감',
-                    '점유율': '시장점유율'
+                    '완속충전기': '완속충전기',
+                    '급속충전기': '급속충전기',
+                    '총충전기': '총충전기',
+                    '충전소수': '충전소수',
+                    '시장점유율': '시장점유율'
                 }
-                for key, val in column_mapping.items():
-                    if key in str(col):
+                
+                # 정확히 일치하면 바로 반환
+                if col_str in exact_mapping:
+                    return exact_mapping[col_str]
+                
+                # 부분 매칭 (증감 키워드 먼저 체크 - 순서 중요!)
+                partial_mapping = [
+                    ('완속증감', '완속증감'),
+                    ('급속증감', '급속증감'),
+                    ('총증감', '총증감'),
+                    ('충전소증감', '충전소증감'),
+                    ('완속', '완속충전기'),
+                    ('급속', '급속충전기'),
+                    ('총', '총충전기'),
+                    ('충전소', '충전소수'),
+                    ('점유율', '시장점유율')
+                ]
+                
+                for key, val in partial_mapping:
+                    if key in col_str:
                         return val
                 return col
             
-            # 다중 컬럼 지원 (리스트인 경우)
+            # 다중 컬럼 지원 (리스트 또는 쉼표 구분 문자열)
             columns = []
-            if isinstance(column, list):
+            
+            # display_column이 리스트인 경우
+            if isinstance(display_column, list):
+                columns = [normalize_column(c) for c in display_column]
+                print(f'      ├─ 🔀 다중 컬럼 감지 (리스트): {display_column} → {columns}', flush=True)
+            # display_column이 쉼표로 구분된 다중 컬럼인지 확인
+            elif display_column and ',' in str(display_column):
+                # 쉼표로 구분된 다중 컬럼 파싱
+                multi_cols = [c.strip() for c in str(display_column).split(',')]
+                columns = [normalize_column(c) for c in multi_cols]
+                print(f'      ├─ 🔀 다중 컬럼 감지: {multi_cols} → {columns}', flush=True)
+            elif isinstance(column, list):
                 columns = [normalize_column(c) for c in column]
             else:
                 columns = [normalize_column(column)]
@@ -193,11 +509,21 @@ JSON만 출력하세요.
             # 데이터 필터링
             filtered_df = df.copy()
             
-            # CPO 필터
-            if cpo_name and 'CPO명' in filtered_df.columns:
-                # 부분 매칭 지원
-                mask = filtered_df['CPO명'].str.contains(cpo_name, case=False, na=False)
+            # CPO 필터 (단일 또는 다중 CPO 지원)
+            cpo_list = []
+            if cpo_name:
+                if isinstance(cpo_name, list):
+                    cpo_list = cpo_name
+                else:
+                    cpo_list = [cpo_name]
+            
+            if cpo_list and 'CPO명' in filtered_df.columns:
+                # 다중 CPO 필터링
+                mask = filtered_df['CPO명'].apply(
+                    lambda x: any(cpo.lower() in str(x).lower() for cpo in cpo_list) if pd.notna(x) else False
+                )
                 filtered_df = filtered_df[mask]
+                print(f'      ├─ CPO 필터 (다중): {cpo_list}', flush=True)
             
             # 기간 필터
             if 'snapshot_month' in filtered_df.columns:
@@ -212,60 +538,339 @@ JSON만 출력하세요.
             # 차트 타입에 따른 데이터 구성
             analysis_type = intent.get('analysis_type', 'trend')
             
-            # 다중 시리즈 지원 (여러 컬럼 비교)
-            if len(columns) > 1:
-                # 다중 컬럼 시계열 차트
-                if 'snapshot_month' in filtered_df.columns:
-                    result = {'labels': [], 'series': [], 'multi_series': True}
-                    
-                    for col in columns:
-                        if col in filtered_df.columns:
-                            grouped = filtered_df.groupby('snapshot_month')[col].sum().reset_index()
-                            grouped = grouped.sort_values('snapshot_month')
-                            
-                            if not result['labels']:
-                                result['labels'] = grouped['snapshot_month'].tolist()
-                            
-                            result['series'].append({
-                                'name': col,
-                                'values': grouped[col].tolist()
-                            })
-                    
-                    return result
-            
-            # 단일 컬럼
+            # 단일 컬럼 (다중 컬럼은 각 analysis_type 내부에서 처리)
             col = columns[0]
             
             if analysis_type == 'trend':
                 # 시간별 추이
-                if 'snapshot_month' in filtered_df.columns and col in filtered_df.columns:
-                    grouped = filtered_df.groupby('snapshot_month')[col].sum().reset_index()
+                print(f'      ├─ Trend 분석: 컬럼 수={len(columns)}, 컬럼={columns}', flush=True)
+                print(f'      ├─ 필터링 후 데이터: {len(filtered_df)}행', flush=True)
+                
+                if cpo_name:
+                    print(f'      ├─ CPO 필터: {cpo_name}', flush=True)
+                    unique_cpos = filtered_df['CPO명'].unique().tolist() if 'CPO명' in filtered_df.columns else []
+                    print(f'      ├─ 필터링된 CPO: {unique_cpos[:5]}...', flush=True)
+                
+                # 전체 CPO 합계가 필요한 경우 (cpo_name이 없고 증감 컬럼인 경우)
+                # 엑셀의 L4:P4 행에서 직접 값을 가져옴
+                is_total_query = cpo_name is None
+                is_change_column = any(c in ['완속증감', '급속증감', '총증감', '충전소증감'] for c in columns)
+                
+                if is_total_query and is_change_column:
+                    print(f'      ├─ 📊 전체 CPO 합계 조회 - 엑셀 합계 행(L4:P4)에서 직접 추출', flush=True)
+                    
+                    # 엑셀 파일에서 직접 합계 데이터 추출
+                    from data_loader import ChargingDataLoader
+                    loader = ChargingDataLoader()
+                    
+                    # 월별 합계 데이터 수집
+                    monthly_totals = {}
+                    files = loader.list_available_files()
+                    
+                    for file_info in files:
+                        s3_key = file_info['key']
+                        filename = file_info['filename']
+                        _, snapshot_month = loader.parse_snapshot_date_from_filename(filename)
+                        
+                        if snapshot_month and (not start_month or snapshot_month >= start_month) and (not end_month or snapshot_month <= end_month):
+                            summary = loader.extract_summary_data(s3_key)
+                            if summary and 'change' in summary:
+                                monthly_totals[snapshot_month] = {
+                                    '완속증감': summary['change'].get('slow_chargers', 0),
+                                    '급속증감': summary['change'].get('fast_chargers', 0),
+                                    '총증감': summary['change'].get('total_chargers', 0),
+                                    '충전소증감': summary['change'].get('stations', 0)
+                                }
+                    
+                    if monthly_totals:
+                        sorted_months = sorted(monthly_totals.keys())
+                        
+                        # 다중 컬럼인 경우
+                        if len(columns) > 1:
+                            result = {'labels': sorted_months, 'series': [], 'multi_series': True}
+                            for target_col in columns:
+                                values = [monthly_totals.get(m, {}).get(target_col, 0) for m in sorted_months]
+                                result['series'].append({'name': target_col, 'values': values})
+                                print(f'      ├─ 시리즈 추가 (엑셀 합계): {target_col} = {values[:3]}...', flush=True)
+                            result['y_axis_label'] = chart_config.get('y_axis_label', '값')
+                            return result
+                        else:
+                            # 단일 컬럼
+                            values = [monthly_totals.get(m, {}).get(col, 0) for m in sorted_months]
+                            print(f'      └─ 추출된 값 (엑셀 합계): {values[:5]}...', flush=True)
+                            return {
+                                'labels': sorted_months,
+                                'values': values,
+                                'y_axis_label': chart_config.get('y_axis_label', col)
+                            }
+                
+                # 다중 CPO + 다중 컬럼 조합 처리
+                unique_cpos = filtered_df['CPO명'].unique().tolist() if 'CPO명' in filtered_df.columns else []
+                is_multi_cpo = len(unique_cpos) > 1
+                is_multi_col = len(columns) > 1
+                
+                if (is_multi_cpo or is_multi_col) and 'snapshot_month' in filtered_df.columns:
+                    print(f'      ├─ 🔀 다중 시리즈 차트 생성: CPO={unique_cpos}, 컬럼={columns}', flush=True)
+                    result = {'labels': [], 'series': [], 'multi_series': True}
+                    
+                    # 다중 CPO + 다중 컬럼: CPO별 컬럼별 시리즈 생성
+                    if is_multi_cpo and is_multi_col:
+                        for cpo in unique_cpos:
+                            cpo_df = filtered_df[filtered_df['CPO명'] == cpo]
+                            for target_col in columns:
+                                if target_col in cpo_df.columns:
+                                    grouped = cpo_df.groupby('snapshot_month')[target_col].first().reset_index()
+                                    grouped = grouped.sort_values('snapshot_month')
+                                    
+                                    if not result['labels']:
+                                        result['labels'] = grouped['snapshot_month'].tolist()
+                                    
+                                    series_name = f'{cpo}_{target_col}'
+                                    result['series'].append({
+                                        'name': series_name,
+                                        'values': grouped[target_col].tolist()
+                                    })
+                                    print(f'      ├─ 시리즈 추가: {series_name} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                    
+                    # 다중 CPO + 단일 컬럼: CPO별 시리즈 생성
+                    elif is_multi_cpo:
+                        target_col = columns[0]
+                        for cpo in unique_cpos:
+                            cpo_df = filtered_df[filtered_df['CPO명'] == cpo]
+                            if target_col in cpo_df.columns:
+                                grouped = cpo_df.groupby('snapshot_month')[target_col].first().reset_index()
+                                grouped = grouped.sort_values('snapshot_month')
+                                
+                                if not result['labels']:
+                                    result['labels'] = grouped['snapshot_month'].tolist()
+                                
+                                result['series'].append({
+                                    'name': f'{cpo}',
+                                    'values': grouped[target_col].tolist()
+                                })
+                                print(f'      ├─ 시리즈 추가: {cpo} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                    
+                    # 단일 CPO + 다중 컬럼: 컬럼별 시리즈 생성
+                    else:
+                        for target_col in columns:
+                            if target_col in filtered_df.columns:
+                                if len(unique_cpos) == 1:
+                                    grouped = filtered_df.groupby('snapshot_month')[target_col].first().reset_index()
+                                else:
+                                    grouped = filtered_df.groupby('snapshot_month')[target_col].sum().reset_index()
+                                
+                                grouped = grouped.sort_values('snapshot_month')
+                                
+                                if not result['labels']:
+                                    result['labels'] = grouped['snapshot_month'].tolist()
+                                
+                                result['series'].append({
+                                    'name': target_col,
+                                    'values': grouped[target_col].tolist()
+                                })
+                                print(f'      ├─ 시리즈 추가: {target_col} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                    
+                    result['y_axis_label'] = chart_config.get('y_axis_label', '값')
+                    print(f'      └─ 다중 시리즈 완료: {len(result["series"])}개 시리즈', flush=True)
+                    return result
+                
+                # 단일 컬럼인 경우
+                target_col = col
+                if 'snapshot_month' in filtered_df.columns and target_col in filtered_df.columns:
+                    if cpo_name and 'CPO명' in filtered_df.columns and len(filtered_df['CPO명'].unique()) == 1:
+                        grouped = filtered_df.groupby('snapshot_month')[target_col].first().reset_index()
+                    else:
+                        grouped = filtered_df.groupby('snapshot_month')[target_col].sum().reset_index()
+                    
                     grouped = grouped.sort_values('snapshot_month')
+                    print(f'      └─ 추출된 값: {grouped[target_col].tolist()[:5]}...', flush=True)
+                    
                     return {
                         'labels': grouped['snapshot_month'].tolist(),
-                        'values': grouped[col].tolist()
+                        'values': grouped[target_col].tolist(),
+                        'y_axis_label': chart_config.get('y_axis_label', target_col)
                     }
             
             elif analysis_type == 'comparison':
-                # 항목별 비교
-                if 'CPO명' in filtered_df.columns and col in filtered_df.columns:
+                # 다중 CPO + 다중 컬럼 시계열 비교인 경우 (trend와 유사하게 처리)
+                unique_cpos = filtered_df['CPO명'].unique().tolist() if 'CPO명' in filtered_df.columns else []
+                is_multi_cpo = len(unique_cpos) > 1
+                is_multi_col = len(columns) > 1
+                
+                # 시계열 비교가 필요한 경우 (다중 CPO 또는 다중 컬럼 + 기간 필터)
+                if (is_multi_cpo or is_multi_col) and 'snapshot_month' in filtered_df.columns and start_month and end_month:
+                    print(f'      ├─ 🔀 시계열 비교 차트 생성: CPO={unique_cpos}, 컬럼={columns}', flush=True)
+                    result = {'labels': [], 'series': [], 'multi_series': True}
+                    
+                    # 다중 CPO + 다중 컬럼: CPO별 컬럼별 시리즈 생성
+                    if is_multi_cpo and is_multi_col:
+                        for cpo in unique_cpos:
+                            cpo_df = filtered_df[filtered_df['CPO명'] == cpo]
+                            for target_col in columns:
+                                if target_col in cpo_df.columns:
+                                    grouped = cpo_df.groupby('snapshot_month')[target_col].first().reset_index()
+                                    grouped = grouped.sort_values('snapshot_month')
+                                    
+                                    if not result['labels']:
+                                        result['labels'] = grouped['snapshot_month'].tolist()
+                                    
+                                    series_name = f'{cpo}_{target_col}'
+                                    result['series'].append({
+                                        'name': series_name,
+                                        'values': grouped[target_col].tolist()
+                                    })
+                                    print(f'      ├─ 시리즈 추가: {series_name} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                    
+                    # 다중 CPO + 단일 컬럼
+                    elif is_multi_cpo:
+                        target_col = columns[0]
+                        for cpo in unique_cpos:
+                            cpo_df = filtered_df[filtered_df['CPO명'] == cpo]
+                            if target_col in cpo_df.columns:
+                                grouped = cpo_df.groupby('snapshot_month')[target_col].first().reset_index()
+                                grouped = grouped.sort_values('snapshot_month')
+                                
+                                if not result['labels']:
+                                    result['labels'] = grouped['snapshot_month'].tolist()
+                                
+                                result['series'].append({
+                                    'name': cpo,
+                                    'values': grouped[target_col].tolist()
+                                })
+                                print(f'      ├─ 시리즈 추가: {cpo} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                    
+                    # 단일 CPO + 다중 컬럼
+                    else:
+                        for target_col in columns:
+                            if target_col in filtered_df.columns:
+                                grouped = filtered_df.groupby('snapshot_month')[target_col].first().reset_index()
+                                grouped = grouped.sort_values('snapshot_month')
+                                
+                                if not result['labels']:
+                                    result['labels'] = grouped['snapshot_month'].tolist()
+                                
+                                result['series'].append({
+                                    'name': target_col,
+                                    'values': grouped[target_col].tolist()
+                                })
+                                print(f'      ├─ 시리즈 추가: {target_col} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                    
+                    result['y_axis_label'] = chart_config.get('y_axis_label', '값')
+                    print(f'      └─ 시계열 비교 완료: {len(result["series"])}개 시리즈', flush=True)
+                    return result
+                
+                # 기존 comparison 로직 (단일 시점 비교)
+                sort_col = normalize_column(sort_column) if sort_column else col
+                # display_column이 리스트인 경우 첫 번째 컬럼 사용
+                if isinstance(display_column, list):
+                    display_col = normalize_column(display_column[0])
+                else:
+                    display_col = normalize_column(display_column) if display_column else col
+                
+                # 계산이 필요한 경우 (증가률 등)
+                calculation_info = intent.get('calculation_required', {})
+                needs_calculation = calculation_info.get('needed', False)
+                
+                if needs_calculation:
+                    calc_type = calculation_info.get('type')
+                    base_col = calculation_info.get('base_column')
+                    change_col = calculation_info.get('change_column')
+                    
+                    base_col = normalize_column(base_col) if base_col else None
+                    change_col = normalize_column(change_col) if change_col else None
+                    
+                    if calc_type == 'growth_rate' and base_col and change_col:
+                        sort_col = change_col
+                        display_col = base_col
+                        y_axis_type = 'calculated_rate'
+                        calculation_info['base_column'] = base_col
+                        calculation_info['change_column'] = change_col
+                
+                if 'CPO명' in filtered_df.columns and sort_col in filtered_df.columns:
                     latest_month = filtered_df['snapshot_month'].max()
                     latest_df = filtered_df[filtered_df['snapshot_month'] == latest_month]
-                    top_df = latest_df.nlargest(10, col)
+                    
+                    # sort_order가 None이면 기본값 'desc' 사용
+                    effective_sort_order = sort_order if sort_order else 'desc'
+                    print(f'      ├─ SQL 실행: ORDER BY {sort_col} {effective_sort_order.upper()} LIMIT {result_limit}', flush=True)
+                    
+                    # 정렬 컬럼 기준으로 상위/하위 추출
+                    if effective_sort_order == 'asc':
+                        top_df = latest_df.nsmallest(result_limit, sort_col)
+                    else:
+                        top_df = latest_df.nlargest(result_limit, sort_col)
+                    
+                    # y축 타입에 따른 값 계산 (display_column 사용)
+                    value_col = display_col if display_col in top_df.columns else sort_col
+                    calc_info_for_values = calculation_info if needs_calculation else None
+                    values = self._calculate_y_values(top_df, value_col, y_axis_type, latest_df, calc_info_for_values)
+                    
+                    print(f'      └─ 결과: {len(top_df)}개 CPO, 값 컬럼={value_col}, y축타입={y_axis_type}', flush=True)
+                    
                     return {
                         'labels': top_df['CPO명'].tolist(),
-                        'values': top_df[col].tolist()
+                        'values': values,
+                        'y_axis_type': y_axis_type,
+                        'y_axis_label': y_axis_label
                     }
             
             elif analysis_type == 'ranking':
-                # 순위
-                if 'CPO명' in filtered_df.columns and col in filtered_df.columns:
+                # 순위 (Text-to-SQL: sort_column으로 정렬, display_column으로 표시)
+                sort_col = normalize_column(sort_column) if sort_column else col
+                display_col = normalize_column(display_column) if display_column else col
+                
+                # 계산이 필요한 경우 (증가률 등)
+                calculation_info = intent.get('calculation_required', {})
+                needs_calculation = calculation_info.get('needed', False)
+                
+                if needs_calculation:
+                    calc_type = calculation_info.get('type')
+                    base_col = calculation_info.get('base_column')
+                    change_col = calculation_info.get('change_column')
+                    
+                    # 컬럼 정규화
+                    base_col = normalize_column(base_col) if base_col else None
+                    change_col = normalize_column(change_col) if change_col else None
+                    
+                    print(f'      ├─ 계산 필요: {calc_type}', flush=True)
+                    print(f'      ├─ 기준 컬럼: {base_col}, 변화 컬럼: {change_col}', flush=True)
+                    
+                    # 증가률 계산을 위해 sort_col과 display_col 조정
+                    if calc_type == 'growth_rate' and base_col and change_col:
+                        sort_col = change_col  # 증감량 기준 정렬
+                        display_col = base_col  # 기준 컬럼 (계산에 사용)
+                        y_axis_type = 'calculated_rate'
+                        calculation_info['base_column'] = base_col
+                        calculation_info['change_column'] = change_col
+                
+                if 'CPO명' in filtered_df.columns and sort_col in filtered_df.columns:
                     latest_month = filtered_df['snapshot_month'].max()
                     latest_df = filtered_df[filtered_df['snapshot_month'] == latest_month]
-                    top_df = latest_df.nlargest(10, col)
+                    
+                    # sort_order가 None이면 기본값 'desc' 사용
+                    effective_sort_order = sort_order if sort_order else 'desc'
+                    print(f'      ├─ SQL 실행: ORDER BY {sort_col} {effective_sort_order.upper()} LIMIT {result_limit}', flush=True)
+                    
+                    # 정렬 컬럼 기준으로 상위/하위 추출
+                    if effective_sort_order == 'asc':
+                        top_df = latest_df.nsmallest(result_limit, sort_col)
+                    else:
+                        top_df = latest_df.nlargest(result_limit, sort_col)
+                    
+                    # y축 타입에 따른 값 계산 (display_column 사용)
+                    value_col = display_col if display_col in top_df.columns else sort_col
+                    
+                    # 계산 정보 전달
+                    calc_info_for_values = calculation_info if needs_calculation else None
+                    values = self._calculate_y_values(top_df, value_col, y_axis_type, latest_df, calc_info_for_values)
+                    
+                    print(f'      └─ 결과: {len(top_df)}개 CPO, 값 컬럼={value_col}, y축타입={y_axis_type}', flush=True)
+                    
                     return {
                         'labels': top_df['CPO명'].tolist(),
-                        'values': top_df[col].tolist()
+                        'values': values,
+                        'y_axis_type': y_axis_type,
+                        'y_axis_label': y_axis_label
                     }
             
             # 기본: 시간별 추이
@@ -282,6 +887,119 @@ JSON만 출력하세요.
         except Exception as e:
             print(f'❌ 데이터 추출 오류: {e}')
             return {'labels': [], 'values': [], 'error': str(e)}
+    
+    def generate_table_answer(self, query: str, df, kb_context: str, intent: dict,
+                               table_data: dict, show_table: bool = True) -> str:
+        """표 기반 답변 생성 (시각화 라이브러리 사용 안함)"""
+        
+        labels = table_data.get('labels', [])
+        values = table_data.get('values', [])
+        series = table_data.get('series', [])
+        is_multi_series = table_data.get('multi_series', False)
+        y_axis_type = table_data.get('y_axis_type', 'value')
+        y_axis_label = table_data.get('y_axis_label', '값')
+        chart_title = intent.get('chart_title', '데이터 분석 결과')
+        
+        table_md = ""
+        data_summary = ""
+        
+        # 다중 시리즈 표 생성
+        if show_table and is_multi_series and series:
+            # 헤더 생성: 기간 | 컬럼1 | 컬럼2 | ...
+            col_names = [s['name'] for s in series]
+            header = "| 기간 | " + " | ".join(col_names) + " |"
+            separator = "|------|" + "|".join(["------"] * len(col_names)) + "|"
+            
+            table_rows = []
+            for i, label in enumerate(labels):
+                row_values = [label]
+                for s in series:
+                    val = s['values'][i] if i < len(s['values']) else 0
+                    if y_axis_type in ['percentage', 'calculated_rate']:
+                        row_values.append(f"{val:.1f}%")
+                    else:
+                        row_values.append(f"{val:,}" if isinstance(val, (int, float)) else str(val))
+                table_rows.append("| " + " | ".join(row_values) + " |")
+            
+            table_md = f"""
+## {chart_title}
+
+{header}
+{separator}
+{chr(10).join(table_rows)}
+"""
+            # 데이터 요약
+            data_summary = f"- 기간: {labels[0]} ~ {labels[-1]}\n- 항목 수: {len(labels)}개\n- 컬럼: {', '.join(col_names)}"
+        
+        # 단일 시리즈 표 생성
+        elif show_table and labels and values:
+            if y_axis_type in ['percentage', 'calculated_rate']:
+                formatted_values = [f"{v:.1f}%" for v in values]
+            else:
+                formatted_values = [f"{v:,}" if isinstance(v, (int, float)) else str(v) for v in values]
+            
+            table_rows = []
+            for i, (label, value) in enumerate(zip(labels, formatted_values), 1):
+                table_rows.append(f"| {i} | {label} | {value} |")
+            
+            table_md = f"""
+## {chart_title}
+
+| 순위 | 항목 | {y_axis_label} |
+|------|------|----------------|
+{chr(10).join(table_rows)}
+"""
+            data_summary = f"- 항목 수: {len(labels)}개\n- 데이터: {list(zip(labels, values))[:5]}..."
+        
+        # LLM 프롬프트 구성
+        prompt = f"""
+당신은 전기차 충전 인프라 데이터 분석 전문가입니다.
+
+## 사용자 질문
+{query}
+
+## 분석 결과 데이터
+{data_summary if data_summary else f"- 항목 수: {len(labels)}개"}
+
+{f"## 표 형식 결과{table_md}" if show_table and table_md else ""}
+
+## Knowledge Base 참고 자료
+{kb_context[:1500] if kb_context else '없음'}
+
+## 답변 작성 지침
+1. {"위 표를 참고하여 " if show_table else ""}데이터를 분석하세요
+2. 주요 특징이나 인사이트를 설명하세요
+3. 간결하고 명확하게 답변하세요
+4. 시각화(차트/그래프)는 생성하지 마세요 - 표 형식으로만 답변합니다
+{"5. 표를 그대로 포함하여 답변하세요" if show_table else "5. 표 없이 텍스트로만 답변하세요"}
+
+한국어로 답변해주세요.
+"""
+        
+        try:
+            payload = {
+                'anthropic_version': Config.ANTHROPIC_VERSION,
+                'max_tokens': 2048,
+                'temperature': 0.5,
+                'messages': [{'role': 'user', 'content': prompt}]
+            }
+            
+            response = self.bedrock_client.invoke_model(
+                modelId=Config.MODEL_ID,
+                contentType='application/json',
+                accept='application/json',
+                body=json.dumps(payload)
+            )
+            
+            response_body = json.loads(response['body'].read())
+            return response_body['content'][0]['text']
+            
+        except Exception as e:
+            # 오류 시 기본 표 형식 답변 반환
+            if show_table:
+                return f"데이터 분석 결과입니다.\n{table_md}"
+            else:
+                return f"데이터 분석 결과: {list(zip(labels, values))}"
     
     def generate_chart(self, intent: dict, chart_data: dict) -> dict:
         """차트 생성"""
@@ -465,12 +1183,72 @@ JSON만 출력하세요.
         
         intent = self.analyze_query_intent(query, available_data)
         
-        print(f'   └─ 🧠 LLM 분석 결과:', flush=True)
+        # Multi-Step Reasoning 분석 결과 출력
+        reasoning = intent.get('reasoning', {})
+        if reasoning:
+            print(f'   └─ 🧠 Multi-Step Reasoning 분석:', flush=True)
+            
+            step1 = reasoning.get('step1_extraction', {})
+            print(f'      ├─ Step1 (요소 추출):', flush=True)
+            print(f'         ├─ 대상: {step1.get("target", "N/A")}', flush=True)
+            print(f'         ├─ 측정값: {step1.get("metric", "N/A")}', flush=True)
+            print(f'         └─ 조건: {step1.get("conditions", "N/A")}', flush=True)
+            
+            step2 = reasoning.get('step2_column_mapping', {})
+            print(f'      ├─ Step2 (컬럼 매핑):', flush=True)
+            print(f'         ├─ 사용자 표현: {step2.get("user_expression", "N/A")}', flush=True)
+            print(f'         ├─ 매핑 컬럼: {step2.get("mapped_column", "N/A")}', flush=True)
+            print(f'         └─ 매핑 이유: {step2.get("mapping_reason", "N/A")}', flush=True)
+            
+            step3 = reasoning.get('step3_confidence', {})
+            print(f'      ├─ Step3 (확신도): {step3.get("level", "N/A")} - {step3.get("reason", "N/A")}', flush=True)
+            
+            step4 = reasoning.get('step4_decision', {})
+            print(f'      └─ Step4 (결정): {step4.get("action", "N/A")} - {step4.get("explanation", "N/A")}', flush=True)
+        
+        # 계산 필요 여부 출력
+        calc_required = intent.get('calculation_required', {})
+        if calc_required.get('needed'):
+            print(f'   └─ 📐 계산 필요:', flush=True)
+            print(f'      ├─ 타입: {calc_required.get("type", "N/A")}', flush=True)
+            print(f'      ├─ 기준 컬럼: {calc_required.get("base_column", "N/A")}', flush=True)
+            print(f'      └─ 변화 컬럼: {calc_required.get("change_column", "N/A")}', flush=True)
+        
+        print(f'   └─ 📊 최종 분석 결과:', flush=True)
+        print(f'      ├─ 출력 형식: {intent.get("output_format", "table")}', flush=True)
         print(f'      ├─ 차트 필요: {intent.get("needs_chart")}', flush=True)
-        print(f'      ├─ 차트 타입: {intent.get("chart_type")}', flush=True)
-        print(f'      ├─ 차트 제목: {intent.get("chart_title")}', flush=True)
+        print(f'      ├─ 표 표시: {intent.get("show_table", True)}', flush=True)
+        print(f'      ├─ 차트 타입: {intent.get("chart_type", "none")}', flush=True)
+        print(f'      ├─ 제목: {intent.get("chart_title")}', flush=True)
         print(f'      ├─ 분석 유형: {intent.get("analysis_type")}', flush=True)
-        print(f'      └─ 데이터 필터: {intent.get("data_filter")}', flush=True)
+        print(f'      ├─ 데이터 필터: {intent.get("data_filter")}', flush=True)
+        chart_config = intent.get('chart_config', {})
+        if chart_config:
+            print(f'      └─ 설정: x축={chart_config.get("x_axis")}, y축={chart_config.get("y_axis")}, y축타입={chart_config.get("y_axis_type")}, y축라벨={chart_config.get("y_axis_label")}', flush=True)
+        else:
+            print(f'      └─ 설정: 기본값 사용', flush=True)
+        
+        # ========================================
+        # Step 3.5: 명확화 필요 여부 확인
+        # ========================================
+        if intent.get('needs_clarification'):
+            clarification_msg = intent.get('clarification_message', '질의를 더 구체적으로 해주세요.')
+            reasoning = intent.get('reasoning', {})
+            confidence = reasoning.get('step3_confidence', {})
+            
+            print(f'   └─ ⚠️ 명확화 필요: {confidence.get("level", "UNKNOWN")}', flush=True)
+            print(f'   └─ 이유: {confidence.get("reason", "N/A")}', flush=True)
+            print(f'   └─ 메시지: {clarification_msg}', flush=True)
+            
+            self._log_separator('Agent 처리 완료 (명확화 요청)')
+            
+            return {
+                'success': True,
+                'query': query,
+                'answer': clarification_msg,
+                'has_chart': False,
+                'needs_clarification': True
+            }
         
         # ========================================
         # Step 4: 도구 선택 및 실행
@@ -573,25 +1351,80 @@ JSON만 출력하세요.
         
         else:
             # ========================================
-            # Step 4: 도구 선택 - 텍스트 답변 (차트 불필요)
+            # Step 4: 표 기반 답변 생성 (차트 불필요)
             # ========================================
-            self._log_step(4, '도구 선택: 텍스트 답변 (Legacy)', {
-                '선택된 도구': 'AIReportGenerator (기존 텍스트 답변)',
-                '이유': '차트가 필요하지 않은 질의로 판단됨',
-                'LLM 분석 결과': intent.get('explanation', 'N/A')
+            output_format = intent.get('output_format', 'table')
+            show_table = intent.get('show_table', True)
+            
+            self._log_step(4, '도구 선택: 표 기반 답변', {
+                '출력 형식': output_format,
+                '표 표시': show_table,
+                '이유': '시각화 키워드 없음 - 표 형식으로 답변'
             })
             
-            self._log_separator('Agent 처리 완료 (텍스트 모드)')
+            # 데이터 추출 (차트와 동일한 로직 사용)
+            print(f'\n   📊 표 데이터 추출 중...', flush=True)
+            table_data = self.extract_chart_data(full_df, intent)
+            
+            if table_data.get('error'):
+                print(f'   └─ ❌ 데이터 추출 실패: {table_data["error"]}', flush=True)
+                return {
+                    'success': False,
+                    'error': table_data['error'],
+                    'has_chart': False
+                }
+            
+            # 다중 시리즈 여부 확인
+            is_multi = table_data.get('multi_series', False)
+            if is_multi:
+                series_count = len(table_data.get('series', []))
+                data_points = len(table_data.get('labels', []))
+                print(f'   └─ ✅ 다중 시리즈 표 데이터 추출 완료', flush=True)
+                print(f'      ├─ 시리즈 수: {series_count}개', flush=True)
+                print(f'      ├─ 데이터 포인트: {data_points}개', flush=True)
+                for s in table_data.get('series', []):
+                    print(f'      ├─ {s["name"]}: {s["values"][:3]}...', flush=True)
+            else:
+                data_points = len(table_data.get('values', []))
+                print(f'   └─ ✅ 표 데이터 추출 완료 ({data_points}개 항목)', flush=True)
+            
+            # ========================================
+            # Step 5: 표 기반 LLM 답변 생성
+            # ========================================
+            self._log_step(5, 'LLM 답변 생성 (표 형식)', {
+                'LLM 모델': Config.MODEL_ID,
+                '출력 형식': output_format,
+                '표 표시': show_table
+            })
+            
+            answer = self.generate_table_answer(
+                query, df, kb_context, intent, table_data, show_table
+            )
+            
+            print(f'   └─ ✅ 답변 생성 완료 ({len(answer)}자)', flush=True)
+            
+            # ========================================
+            # 처리 완료 요약
+            # ========================================
+            self._log_separator('Agent 처리 완료 (표 모드)')
             print(f'📊 처리 요약:', flush=True)
             print(f'   ├─ 질의: {query[:50]}...', flush=True)
-            print(f'   ├─ 차트 생성: 불필요', flush=True)
+            print(f'   ├─ 출력 형식: {output_format}', flush=True)
+            print(f'   ├─ 표 표시: {show_table}', flush=True)
             print(f'   ├─ 데이터 소스: S3 캐시 (메모리)', flush=True)
-            print(f'   └─ RAG 사용: {"예" if kb_context else "아니오"} ({len(kb_context)}자)', flush=True)
+            print(f'   ├─ RAG 사용: {"예" if kb_context else "아니오"} ({len(kb_context)}자)', flush=True)
+            print(f'   └─ 답변 길이: {len(answer)}자', flush=True)
             
             return {
                 'success': True,
                 'query': query,
-                'answer': None,
+                'answer': answer,
                 'has_chart': False,
-                'use_legacy': True
+                'show_table': show_table,
+                'output_format': output_format,
+                'data_summary': {
+                    'labels': table_data.get('labels', []),
+                    'values': table_data.get('values', []),
+                    'count': data_points
+                }
             }

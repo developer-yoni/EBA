@@ -36,16 +36,26 @@ class ChartGenerator:
         """다중 시리즈 라인 차트 코드 생성"""
         labels = data.get('labels', [])
         series = data.get('series', [])
+        y_axis_label = data.get('y_axis_label', '값')
         
         # 시리즈 데이터를 Python 코드로 변환
         series_code = ""
+        annotation_code = ""
         colors = ['#667eea', '#48bb78', '#ed8936', '#e53e3e', '#9f7aea']
         
         for i, s in enumerate(series):
             color = colors[i % len(colors)]
             series_code += f'''
-ax.plot(labels, {s['values']}, marker='o', linewidth=2, markersize=6, 
+series_{i}_values = {s['values']}
+ax.plot(labels, series_{i}_values, marker='o', linewidth=2, markersize=6, 
         color='{color}', label='{s['name']}')
+'''
+            # 각 포인트에 값 표시 (시리즈별로 위/아래 오프셋 다르게)
+            offset = 8 if i % 2 == 0 else -15
+            annotation_code += f'''
+for j, v in enumerate(series_{i}_values):
+    ax.annotate(f'{{v:,.0f}}', (labels[j], v), textcoords="offset points",
+                xytext=(0, {offset}), ha='center', fontsize=7, color='{color}', alpha=0.8)
 '''
         
         return f'''
@@ -59,13 +69,16 @@ plt.rcParams['axes.unicode_minus'] = False
 
 labels = {labels}
 
-fig, ax = plt.subplots(figsize=(12, 6))
+fig, ax = plt.subplots(figsize=(14, 7))
 
 {series_code}
 
+# 각 데이터 포인트에 값 표시
+{annotation_code}
+
 ax.set_title('{title}', fontsize=16, fontweight='bold', pad=20)
 ax.set_xlabel('기간', fontsize=12)
-ax.set_ylabel('값', fontsize=12)
+ax.set_ylabel('{y_axis_label}', fontsize=12)
 ax.grid(True, linestyle='--', alpha=0.7)
 ax.legend(loc='upper left', fontsize=10)
 
@@ -129,6 +142,17 @@ print(f"data:image/png;base64,{{img_base64}}")
     
     def _generate_bar_chart_code(self, data: dict, title: str, options: dict = None) -> str:
         """바 차트 코드 생성"""
+        y_axis_label = data.get('y_axis_label', '값')
+        y_axis_type = data.get('y_axis_type', 'value')
+        
+        # 타입에 따른 포맷 변경
+        if y_axis_type == 'percentage':
+            value_format = "f'{v:.1f}%'"
+        elif y_axis_type == 'calculated_rate':
+            value_format = "f'{v:.1f}%'"  # 증가률도 퍼센트로 표시
+        else:
+            value_format = "f'{v:,}'"
+        
         return f'''
 import matplotlib.pyplot as plt
 import numpy as np
@@ -146,12 +170,12 @@ colors = plt.cm.Blues(np.linspace(0.4, 0.8, len(labels)))
 bars = ax.bar(labels, values, color=colors, edgecolor='white', linewidth=1.2)
 
 ax.set_title('{title}', fontsize=16, fontweight='bold', pad=20)
-ax.set_xlabel('항목', fontsize=12)
-ax.set_ylabel('값', fontsize=12)
+ax.set_xlabel('CPO', fontsize=12)
+ax.set_ylabel('{y_axis_label}', fontsize=12)
 ax.grid(True, axis='y', linestyle='--', alpha=0.7)
 
 for bar, v in zip(bars, values):
-    ax.annotate(f'{{v:,}}', (bar.get_x() + bar.get_width()/2, bar.get_height()),
+    ax.annotate({value_format}, (bar.get_x() + bar.get_width()/2, bar.get_height()),
                 textcoords="offset points", xytext=(0,5), ha='center', fontsize=9)
 
 plt.xticks(rotation=45, ha='right')
@@ -168,6 +192,23 @@ print(f"data:image/png;base64,{{img_base64}}")
     
     def _generate_pie_chart_code(self, data: dict, title: str, options: dict = None) -> str:
         """파이 차트 코드 생성"""
+        y_axis_type = data.get('y_axis_type', 'value')
+        y_axis_label = data.get('y_axis_label', '값')
+        
+        # 값 표시 방식에 따른 autopct 설정
+        if y_axis_type == 'percentage':
+            # 점유율 모드: 퍼센트로 표시
+            autopct_code = "autopct='%1.1f%%'"
+            legend_format = "f'{l}: {v:.1f}%'"
+        elif y_axis_type == 'calculated_rate':
+            # 증가률 모드: 퍼센트로 표시
+            autopct_code = "autopct='%1.1f%%'"
+            legend_format = "f'{l}: {v:.1f}%'"
+        else:
+            # 개수 모드: 실제 값과 비율 함께 표시
+            autopct_code = "autopct=lambda pct: f'{int(pct/100.*sum(values)):,}'"
+            legend_format = "f'{l}: {v:,}'"
+        
         return f'''
 import matplotlib.pyplot as plt
 import base64
@@ -179,13 +220,20 @@ plt.rcParams['axes.unicode_minus'] = False
 labels = {data.get('labels', [])}
 values = {data.get('values', [])}
 
-fig, ax = plt.subplots(figsize=(10, 8))
+fig, ax = plt.subplots(figsize=(12, 8))
 colors = plt.cm.Set3(range(len(labels)))
-wedges, texts, autotexts = ax.pie(values, labels=labels, autopct='%1.1f%%',
-                                   colors=colors, startangle=90)
+
+# 파이 차트 생성
+wedges, texts, autotexts = ax.pie(values, labels=None, {autopct_code},
+                                   colors=colors, startangle=90, pctdistance=0.75)
+
+# 범례 추가 (라벨 + 값)
+legend_labels = [{legend_format} for l, v in zip(labels, values)]
+ax.legend(wedges, legend_labels, title="{y_axis_label}", loc="center left", 
+          bbox_to_anchor=(1, 0, 0.5, 1), fontsize=9)
 
 ax.set_title('{title}', fontsize=16, fontweight='bold', pad=20)
-plt.setp(autotexts, size=10, weight='bold')
+plt.setp(autotexts, size=9, weight='bold')
 
 plt.tight_layout()
 
