@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>한국 전기차 충전 인프라 분석 리포트</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -131,6 +132,16 @@
             border-radius: 10px;
             margin-bottom: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            page-break-inside: avoid;
+        }
+        
+        /* PDF 출력용 스타일 */
+        @media print {
+            .report-section {
+                box-shadow: none;
+                border: 1px solid #e2e8f0;
+                page-break-inside: avoid;
+            }
         }
         
         .report-section h2 {
@@ -524,6 +535,9 @@
                 
                 <button class="btn btn-secondary" onclick="generateReport()" id="reportBtn" disabled style="margin-top: 10px;">
                     🤖 AI 리포트 생성
+                </button>
+                <button class="btn btn-primary" onclick="downloadReportPDF()" id="downloadPdfBtn" disabled style="margin-top: 10px; margin-left: 10px;">
+                    📥 PDF 다운로드
                 </button>
                 
                 <!-- 진행도 표시 -->
@@ -1512,6 +1526,9 @@
                     // 버튼 다시 활성화
                     reportBtn.disabled = false;
                     reportBtn.textContent = '🤖 AI 리포트 생성';
+                    
+                    // PDF 다운로드 버튼 활성화
+                    document.getElementById('downloadPdfBtn').disabled = false;
                 } else {
                     clearInterval(progressInterval);
                     progressContainer.classList.add('hidden');
@@ -1526,6 +1543,55 @@
                 reportBtn.disabled = false;
                 reportBtn.textContent = '🤖 AI 리포트 생성';
             }
+        }
+        
+        // PDF 다운로드 함수
+        function downloadReportPDF() {
+            const reportContainer = document.getElementById('reportContainer');
+            
+            if (reportContainer.classList.contains('hidden')) {
+                alert('먼저 AI 리포트를 생성해주세요.');
+                return;
+            }
+            
+            const downloadBtn = document.getElementById('downloadPdfBtn');
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = '📥 PDF 생성 중...';
+            
+            // 현재 날짜로 파일명 생성
+            const today = new Date();
+            const dateStr = today.toISOString().slice(0, 10);
+            const targetMonth = document.getElementById('reportTargetMonth').value || 'report';
+            const filename = `충전인프라_AI리포트_${targetMonth}_${dateStr}.pdf`;
+            
+            // PDF 옵션 설정
+            const opt = {
+                margin: [10, 10, 10, 10],
+                filename: filename,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { 
+                    scale: 2,
+                    useCORS: true,
+                    letterRendering: true
+                },
+                jsPDF: { 
+                    unit: 'mm', 
+                    format: 'a4', 
+                    orientation: 'portrait' 
+                },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+            };
+            
+            // PDF 생성 및 다운로드
+            html2pdf().set(opt).from(reportContainer).save().then(() => {
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = '📥 PDF 다운로드';
+            }).catch((error) => {
+                console.error('PDF 생성 오류:', error);
+                alert('PDF 생성 중 오류가 발생했습니다.');
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = '📥 PDF 다운로드';
+            });
         }
         
         async function submitQuery() {
