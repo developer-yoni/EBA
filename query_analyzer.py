@@ -528,19 +528,30 @@ JSON만 출력하세요.
             
             # CPO 필터 (단일 또는 다중 CPO 지원)
             cpo_list = []
+            has_total_cpo = False  # '전체' CPO 요청 여부
             if cpo_name:
                 if isinstance(cpo_name, list):
                     cpo_list = cpo_name
                 else:
                     cpo_list = [cpo_name]
+                # '전체' 키워드 확인
+                total_keywords = ['전체', '전체cpo', '전체 cpo', 'all', 'total']
+                has_total_cpo = any(kw in [c.lower() for c in cpo_list] for kw in total_keywords)
+                # '전체'를 제외한 실제 CPO 목록
+                actual_cpo_list = [c for c in cpo_list if c.lower() not in total_keywords]
+            else:
+                actual_cpo_list = []
             
-            if cpo_list and 'CPO명' in filtered_df.columns:
-                # 다중 CPO 필터링
+            if actual_cpo_list and 'CPO명' in filtered_df.columns:
+                # 다중 CPO 필터링 (전체 제외)
                 mask = filtered_df['CPO명'].apply(
-                    lambda x: any(cpo.lower() in str(x).lower() for cpo in cpo_list) if pd.notna(x) else False
+                    lambda x: any(cpo.lower() in str(x).lower() for cpo in actual_cpo_list) if pd.notna(x) else False
                 )
                 filtered_df = filtered_df[mask]
-                print(f'      ├─ CPO 필터 (다중): {cpo_list}', flush=True)
+                print(f'      ├─ CPO 필터 (다중): {actual_cpo_list}', flush=True)
+            
+            if has_total_cpo:
+                print(f'      ├─ 📊 전체 CPO 합계 요청 감지', flush=True)
             
             # 기간 필터
             if 'snapshot_month' in filtered_df.columns:
@@ -568,12 +579,13 @@ JSON만 출력하세요.
                     unique_cpos = filtered_df['CPO명'].unique().tolist() if 'CPO명' in filtered_df.columns else []
                     print(f'      ├─ 필터링된 CPO: {unique_cpos[:5]}...', flush=True)
                 
-                # 전체 CPO 합계가 필요한 경우 (cpo_name이 없고 증감 컬럼인 경우)
+                # 전체 CPO 합계가 필요한 경우
                 # 엑셀의 L4:P4 행에서 직접 값을 가져옴
-                is_total_query = cpo_name is None
+                is_total_only_query = cpo_name is None  # 전체만 요청
+                is_total_with_cpo_query = has_total_cpo and actual_cpo_list  # 전체 + 특정 CPO 비교 요청
                 is_change_column = any(c in ['완속증감', '급속증감', '총증감', '충전소증감'] for c in columns)
                 
-                if is_total_query and is_change_column:
+                if (is_total_only_query or is_total_with_cpo_query) and is_change_column:
                     print(f'      ├─ 📊 전체 CPO 합계 조회 - 엑셀 합계 행(L4:P4)에서 직접 추출', flush=True)
                     
                     # 엑셀 파일에서 직접 합계 데이터 추출
@@ -602,6 +614,50 @@ JSON만 출력하세요.
                     if monthly_totals:
                         sorted_months = sorted(monthly_totals.keys())
                         
+                        # 전체 CPO + 특정 CPO 비교인 경우
+                        if is_total_with_cpo_query and actual_cpo_list:
+                            result = {'labels': sorted_months, 'series': [], 'multi_series': True}
+                            
+                            # 1. 전체 CPO 시리즈 추가
+                            for target_col in columns:
+                                values = [monthly_totals.get(m, {}).get(target_col, 0) for m in sorted_months]
+                                result['series'].append({'name': f'전체_{target_col}', 'values': values})
+                                print(f'      ├─ 시리즈 추가 (전체 CPO): 전체_{target_col} = {values[:3]}...', flush=True)
+                            
+                            # 2. 특정 CPO 시리즈 추가
+                            for cpo in actual_cpo_list:
+                                # 해당 CPO 데이터 필터링
+                                cpo_mask = df['CPO명'].apply(
+                                    lambda x: cpo.lower() in str(x).lower() if pd.notna(x) else False
+                                )
+                                cpo_df = df[cpo_mask]
+                                
+                                # 기간 필터
+                                if 'snapshot_month' in cpo_df.columns:
+                                    if start_month:
+                                        cpo_df = cpo_df[cpo_df['snapshot_month'] >= start_month]
+                                    if end_month:
+                                        cpo_df = cpo_df[cpo_df['snapshot_month'] <= end_month]
+                                
+                                for target_col in columns:
+                                    if target_col in cpo_df.columns:
+                                        grouped = cpo_df.groupby('snapshot_month')[target_col].first().reset_index()
+                                        grouped = grouped.sort_values('snapshot_month')
+                                        
+                                        # sorted_months에 맞춰 값 정렬
+                                        values = []
+                                        for m in sorted_months:
+                                            month_val = grouped[grouped['snapshot_month'] == m][target_col].values
+                                            values.append(float(month_val[0]) if len(month_val) > 0 else 0)
+                                        
+                                        result['series'].append({'name': f'{cpo}_{target_col}', 'values': values})
+                                        print(f'      ├─ 시리즈 추가 ({cpo}): {cpo}_{target_col} = {values[:3]}...', flush=True)
+                            
+                            result['y_axis_label'] = chart_config.get('y_axis_label', '값')
+                            print(f'      └─ 전체+CPO 비교 완료: {len(result["series"])}개 시리즈', flush=True)
+                            return result
+                        
+                        # 전체 CPO만 요청한 경우 (기존 로직)
                         # 다중 컬럼인 경우
                         if len(columns) > 1:
                             result = {'labels': sorted_months, 'series': [], 'multi_series': True}
@@ -717,6 +773,74 @@ JSON만 출력하세요.
                     }
             
             elif analysis_type == 'comparison':
+                # 전체 CPO + 특정 CPO 비교인 경우 (증감 컬럼)
+                is_change_column = any(c in ['완속증감', '급속증감', '총증감', '충전소증감'] for c in columns)
+                
+                if has_total_cpo and is_change_column:
+                    print(f'      ├─ 📊 전체 CPO + 특정 CPO 비교 (comparison)', flush=True)
+                    
+                    # 엑셀 파일에서 전체 합계 데이터 추출
+                    from data_loader import ChargingDataLoader
+                    loader = ChargingDataLoader()
+                    
+                    monthly_totals = {}
+                    files = loader.list_available_files()
+                    
+                    for file_info in files:
+                        s3_key = file_info['key']
+                        filename = file_info['filename']
+                        _, snapshot_month = loader.parse_snapshot_date_from_filename(filename)
+                        
+                        if snapshot_month and (not start_month or snapshot_month >= start_month) and (not end_month or snapshot_month <= end_month):
+                            summary = loader.extract_summary_data(s3_key)
+                            if summary and 'change' in summary:
+                                monthly_totals[snapshot_month] = {
+                                    '완속증감': summary['change'].get('slow_chargers', 0),
+                                    '급속증감': summary['change'].get('fast_chargers', 0),
+                                    '총증감': summary['change'].get('total_chargers', 0),
+                                    '충전소증감': summary['change'].get('stations', 0)
+                                }
+                    
+                    if monthly_totals:
+                        sorted_months = sorted(monthly_totals.keys())
+                        result = {'labels': sorted_months, 'series': [], 'multi_series': True}
+                        
+                        # 1. 전체 CPO 시리즈 추가
+                        for target_col in columns:
+                            values = [monthly_totals.get(m, {}).get(target_col, 0) for m in sorted_months]
+                            result['series'].append({'name': f'전체_{target_col}', 'values': values})
+                            print(f'      ├─ 시리즈 추가 (전체 CPO): 전체_{target_col} = {values[:3]}...', flush=True)
+                        
+                        # 2. 특정 CPO 시리즈 추가
+                        for cpo in actual_cpo_list:
+                            cpo_mask = df['CPO명'].apply(
+                                lambda x: cpo.lower() in str(x).lower() if pd.notna(x) else False
+                            )
+                            cpo_df = df[cpo_mask]
+                            
+                            if 'snapshot_month' in cpo_df.columns:
+                                if start_month:
+                                    cpo_df = cpo_df[cpo_df['snapshot_month'] >= start_month]
+                                if end_month:
+                                    cpo_df = cpo_df[cpo_df['snapshot_month'] <= end_month]
+                            
+                            for target_col in columns:
+                                if target_col in cpo_df.columns:
+                                    grouped = cpo_df.groupby('snapshot_month')[target_col].first().reset_index()
+                                    grouped = grouped.sort_values('snapshot_month')
+                                    
+                                    values = []
+                                    for m in sorted_months:
+                                        month_val = grouped[grouped['snapshot_month'] == m][target_col].values
+                                        values.append(float(month_val[0]) if len(month_val) > 0 else 0)
+                                    
+                                    result['series'].append({'name': f'{cpo}_{target_col}', 'values': values})
+                                    print(f'      ├─ 시리즈 추가 ({cpo}): {cpo}_{target_col} = {values[:3]}...', flush=True)
+                        
+                        result['y_axis_label'] = chart_config.get('y_axis_label', '값')
+                        print(f'      └─ 전체+CPO 비교 완료: {len(result["series"])}개 시리즈', flush=True)
+                        return result
+                
                 # 다중 CPO + 다중 컬럼 시계열 비교인 경우 (trend와 유사하게 처리)
                 unique_cpos = filtered_df['CPO명'].unique().tolist() if 'CPO명' in filtered_df.columns else []
                 is_multi_cpo = len(unique_cpos) > 1
