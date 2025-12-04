@@ -406,7 +406,7 @@
     <div class="container">
         <header>
             <h1>⚡ 한국 전기차 충전 인프라 분석 리포트</h1>
-            <p class="subtitle">AWS Bedrock + Knowledge Base 기반 자동 분석 시스템</p>
+            <p class="subtitle">AWS Bedrock + Knowledge Base + Code Interpreter MCP 기반 자동 분석 시스템</p>
             <div style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 6px;">
                 <span id="dataStatus" style="font-size: 13px;">🔄 데이터 초기화 중...</span>
             </div>
@@ -780,10 +780,17 @@
                 
                 if (data.success) {
                     dataLoaded = true;
-                    const dashboard = data.dashboard;
-                    const targetMonth = dashboard.target_month || '전체';
                     
-                    document.getElementById('dataStatus').textContent = `✅ 데이터 준비 완료 (${targetMonth})`;
+                    // RAG(Knowledge Base)에서 로드한 전체 데이터 기간 표시 (min ~ max)
+                    let periodText = '전체';
+                    if (availableMonths && availableMonths.length > 0) {
+                        const sortedMonths = [...availableMonths].sort();
+                        const minMonth = sortedMonths[0];
+                        const maxMonth = sortedMonths[sortedMonths.length - 1];
+                        periodText = `${minMonth} ~ ${maxMonth}`;
+                    }
+                    
+                    document.getElementById('dataStatus').textContent = `✅ RAG 데이터 준비 완료 (${periodText})`;
                     
                     // 버튼 활성화
                     document.getElementById('dashboardBtn').disabled = false;

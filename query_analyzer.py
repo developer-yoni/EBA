@@ -488,6 +488,20 @@ JSON만 출력하세요.
                         return val
                 return col
             
+            # 시장점유율 값 변환 함수 (소수점 → 퍼센트)
+            def convert_market_share(col_name, values):
+                """시장점유율 컬럼인 경우 소수점을 퍼센트로 변환"""
+                if col_name == '시장점유율':
+                    # 값이 1 미만이면 소수점 형태이므로 100을 곱해 퍼센트로 변환
+                    converted = []
+                    for v in values:
+                        if v is not None and v < 1:
+                            converted.append(round(v * 100, 2))
+                        else:
+                            converted.append(v)
+                    return converted
+                return values
+            
             # 다중 컬럼 지원 (리스트 또는 쉼표 구분 문자열)
             columns = []
             
@@ -501,6 +515,9 @@ JSON만 출력하세요.
                 multi_cols = [c.strip() for c in str(display_column).split(',')]
                 columns = [normalize_column(c) for c in multi_cols]
                 print(f'      ├─ 🔀 다중 컬럼 감지: {multi_cols} → {columns}', flush=True)
+            # display_column이 단일 값인 경우 (수정: column 대신 display_column 사용)
+            elif display_column:
+                columns = [normalize_column(display_column)]
             elif isinstance(column, list):
                 columns = [normalize_column(c) for c in column]
             else:
@@ -626,11 +643,13 @@ JSON만 출력하세요.
                                         result['labels'] = grouped['snapshot_month'].tolist()
                                     
                                     series_name = f'{cpo}_{target_col}'
+                                    # 시장점유율 변환 적용
+                                    values = convert_market_share(target_col, grouped[target_col].tolist())
                                     result['series'].append({
                                         'name': series_name,
-                                        'values': grouped[target_col].tolist()
+                                        'values': values
                                     })
-                                    print(f'      ├─ 시리즈 추가: {series_name} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                                    print(f'      ├─ 시리즈 추가: {series_name} = {values[:3]}...', flush=True)
                     
                     # 다중 CPO + 단일 컬럼: CPO별 시리즈 생성
                     elif is_multi_cpo:
@@ -644,11 +663,13 @@ JSON만 출력하세요.
                                 if not result['labels']:
                                     result['labels'] = grouped['snapshot_month'].tolist()
                                 
+                                # 시장점유율 변환 적용
+                                values = convert_market_share(target_col, grouped[target_col].tolist())
                                 result['series'].append({
                                     'name': f'{cpo}',
-                                    'values': grouped[target_col].tolist()
+                                    'values': values
                                 })
-                                print(f'      ├─ 시리즈 추가: {cpo} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                                print(f'      ├─ 시리즈 추가: {cpo} = {values[:3]}...', flush=True)
                     
                     # 단일 CPO + 다중 컬럼: 컬럼별 시리즈 생성
                     else:
@@ -664,11 +685,13 @@ JSON만 출력하세요.
                                 if not result['labels']:
                                     result['labels'] = grouped['snapshot_month'].tolist()
                                 
+                                # 시장점유율 변환 적용
+                                values = convert_market_share(target_col, grouped[target_col].tolist())
                                 result['series'].append({
                                     'name': target_col,
-                                    'values': grouped[target_col].tolist()
+                                    'values': values
                                 })
-                                print(f'      ├─ 시리즈 추가: {target_col} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                                print(f'      ├─ 시리즈 추가: {target_col} = {values[:3]}...', flush=True)
                     
                     result['y_axis_label'] = chart_config.get('y_axis_label', '값')
                     print(f'      └─ 다중 시리즈 완료: {len(result["series"])}개 시리즈', flush=True)
@@ -683,11 +706,13 @@ JSON만 출력하세요.
                         grouped = filtered_df.groupby('snapshot_month')[target_col].sum().reset_index()
                     
                     grouped = grouped.sort_values('snapshot_month')
-                    print(f'      └─ 추출된 값: {grouped[target_col].tolist()[:5]}...', flush=True)
+                    # 시장점유율 변환 적용
+                    values = convert_market_share(target_col, grouped[target_col].tolist())
+                    print(f'      └─ 추출된 값: {values[:5]}...', flush=True)
                     
                     return {
                         'labels': grouped['snapshot_month'].tolist(),
-                        'values': grouped[target_col].tolist(),
+                        'values': values,
                         'y_axis_label': chart_config.get('y_axis_label', target_col)
                     }
             
@@ -715,11 +740,13 @@ JSON만 출력하세요.
                                         result['labels'] = grouped['snapshot_month'].tolist()
                                     
                                     series_name = f'{cpo}_{target_col}'
+                                    # 시장점유율 변환 적용
+                                    values = convert_market_share(target_col, grouped[target_col].tolist())
                                     result['series'].append({
                                         'name': series_name,
-                                        'values': grouped[target_col].tolist()
+                                        'values': values
                                     })
-                                    print(f'      ├─ 시리즈 추가: {series_name} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                                    print(f'      ├─ 시리즈 추가: {series_name} = {values[:3]}...', flush=True)
                     
                     # 다중 CPO + 단일 컬럼
                     elif is_multi_cpo:
@@ -733,11 +760,13 @@ JSON만 출력하세요.
                                 if not result['labels']:
                                     result['labels'] = grouped['snapshot_month'].tolist()
                                 
+                                # 시장점유율 변환 적용
+                                values = convert_market_share(target_col, grouped[target_col].tolist())
                                 result['series'].append({
                                     'name': cpo,
-                                    'values': grouped[target_col].tolist()
+                                    'values': values
                                 })
-                                print(f'      ├─ 시리즈 추가: {cpo} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                                print(f'      ├─ 시리즈 추가: {cpo} = {values[:3]}...', flush=True)
                     
                     # 단일 CPO + 다중 컬럼
                     else:
@@ -749,11 +778,13 @@ JSON만 출력하세요.
                                 if not result['labels']:
                                     result['labels'] = grouped['snapshot_month'].tolist()
                                 
+                                # 시장점유율 변환 적용
+                                values = convert_market_share(target_col, grouped[target_col].tolist())
                                 result['series'].append({
                                     'name': target_col,
-                                    'values': grouped[target_col].tolist()
+                                    'values': values
                                 })
-                                print(f'      ├─ 시리즈 추가: {target_col} = {grouped[target_col].tolist()[:3]}...', flush=True)
+                                print(f'      ├─ 시리즈 추가: {target_col} = {values[:3]}...', flush=True)
                     
                     result['y_axis_label'] = chart_config.get('y_axis_label', '값')
                     print(f'      └─ 시계열 비교 완료: {len(result["series"])}개 시리즈', flush=True)
