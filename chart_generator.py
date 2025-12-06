@@ -290,15 +290,16 @@ print(f"data:image/png;base64,{{img_base64}}")
             # 로컬 실행 (matplotlib 사용)
             import subprocess
             import tempfile
+            import sys
             
             # 임시 파일에 코드 저장
             with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
                 f.write(code)
                 temp_file = f.name
             
-            # 코드 실행
+            # 현재 Python 인터프리터 사용 (conda 환경 유지)
             result = subprocess.run(
-                ['python3', temp_file],
+                [sys.executable, temp_file],
                 capture_output=True,
                 text=True,
                 timeout=30

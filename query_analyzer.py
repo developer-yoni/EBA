@@ -543,9 +543,13 @@ JSON만 출력하세요.
                 actual_cpo_list = []
             
             if actual_cpo_list and 'CPO명' in filtered_df.columns:
-                # 다중 CPO 필터링 (전체 제외)
+                # 다중 CPO 필터링 (전체 제외) - 띄어쓰기 무시
+                def normalize_cpo_name(name):
+                    """CPO명 정규화: 띄어쓰기 제거, 소문자 변환"""
+                    return str(name).replace(' ', '').replace('\u3000', '').lower()
+                
                 mask = filtered_df['CPO명'].apply(
-                    lambda x: any(cpo.lower() in str(x).lower() for cpo in actual_cpo_list) if pd.notna(x) else False
+                    lambda x: any(normalize_cpo_name(cpo) in normalize_cpo_name(x) for cpo in actual_cpo_list) if pd.notna(x) else False
                 )
                 filtered_df = filtered_df[mask]
                 print(f'      ├─ CPO 필터 (다중): {actual_cpo_list}', flush=True)
