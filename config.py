@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 class Config:
     # AWS 자격 증명
@@ -18,7 +18,7 @@ class Config:
     # Bedrock 설정
     MODEL_ID = os.getenv('MODEL_ID', 'global.anthropic.claude-sonnet-4-5-20250929-v1:0')
     ANTHROPIC_VERSION = 'bedrock-2023-05-31'
-    MAX_TOKENS = 4096
+    MAX_TOKENS = 8192
     TEMPERATURE = 0.7
     
     # Knowledge Base 설정

@@ -330,7 +330,7 @@ class ChargingDataAnalyzer:
         }
     
     def get_period_summary(self, start_month, end_month):
-        """선택 기간의 요약 데이터 (첫 행: 종료월 기준 전체, 두 번째 행: 기간 증감량)"""
+        """선택 기간의 요약 데이터 (첫 행: 종료월 기준 전체, 두 번째 행: 전월 대비 증감량, 세 번째 행: 기간 증감량)"""
         if 'snapshot_month' not in self.df.columns:
             return None
         
@@ -350,6 +350,35 @@ class ChargingDataAnalyzer:
             'fast_chargers': int(end_data['급속충전기'].sum()) if '급속충전기' in end_data.columns else 0,
             'total_chargers': int(end_data['총충전기'].sum()) if '총충전기' in end_data.columns else 0
         }
+        
+        # 전월 대비 증감량 계산 (종료월 기준)
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
+        
+        end_date = datetime.strptime(end_month, '%Y-%m')
+        prev_date = end_date - relativedelta(months=1)
+        prev_month = prev_date.strftime('%Y-%m')
+        
+        prev_data = self.df[self.df['snapshot_month'] == prev_month]
+        monthly_change = None
+        
+        if len(prev_data) > 0:
+            prev_total = {
+                'cpos': int(len(prev_data)),
+                'stations': int(prev_data['충전소수'].sum()) if '충전소수' in prev_data.columns else 0,
+                'slow_chargers': int(prev_data['완속충전기'].sum()) if '완속충전기' in prev_data.columns else 0,
+                'fast_chargers': int(prev_data['급속충전기'].sum()) if '급속충전기' in prev_data.columns else 0,
+                'total_chargers': int(prev_data['총충전기'].sum()) if '총충전기' in prev_data.columns else 0
+            }
+            monthly_change = {
+                'cpos': total['cpos'] - prev_total['cpos'],
+                'stations': total['stations'] - prev_total['stations'],
+                'slow_chargers': total['slow_chargers'] - prev_total['slow_chargers'],
+                'fast_chargers': total['fast_chargers'] - prev_total['fast_chargers'],
+                'total_chargers': total['total_chargers'] - prev_total['total_chargers'],
+                'prev_month': prev_month,
+                'current_month': end_month
+            }
         
         # 기간 증감량 계산 (종료월 - 시작월)
         if len(start_data) > 0:
@@ -379,6 +408,7 @@ class ChargingDataAnalyzer:
         
         return {
             'total': total,
+            'monthly_change': monthly_change,
             'change': change,
             'start_month': start_month,
             'end_month': end_month

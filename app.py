@@ -293,13 +293,16 @@ def get_dashboard():
 
 @app.route('/api/generate-report', methods=['GET', 'POST'])
 def generate_report():
-    """AI 리포트 생성 (GS차지비 관점)"""
+    """AI 리포트 생성 (3가지 유형)"""
     try:
         target_month = None
+        report_type = 'kpi'  # 기본값
+        
         if request.method == 'POST':
             data = request.json
             target_month = data.get('targetMonth')
-            print(f'📅 리포트 생성 - 기준월: {target_month}', flush=True)
+            report_type = data.get('reportType', 'kpi')
+            print(f'📅 리포트 생성 - 기준월: {target_month}, 유형: {report_type}', flush=True)
         
         if cache['full_data'] is None:
             return jsonify({
@@ -313,34 +316,47 @@ def generate_report():
                 'error': '기준월을 선택해주세요'
             }), 400
         
-        # 기준월 전후 1년 범위 계산
-        from datetime import datetime
-        target_date = datetime.strptime(target_month, '%Y-%m')
-        
-        # 전후 1년 범위의 월 목록 생성
+        # 실제 데이터에서 사용 가능한 모든 월 가져오기
         all_months = sorted(cache['full_data']['snapshot_month'].unique().tolist())
         
-        # 기준월 기준 전후 12개월 필터링
+        # 기준월 기준 최근 12개월 계산
+        from datetime import datetime
+        
+        target_date = datetime.strptime(target_month, '%Y-%m')
+        
+        # 12개월 전 계산 (기준월 포함)
         year = target_date.year
         month = target_date.month
         
-        start_year = year - 1
-        start_month_num = month
-        end_year = year + 1
-        end_month_num = month
+        start_year = year - 1 if month == 12 else year - (12 - month) // 12 - 1
+        start_month_num = month if month == 12 else (month - 12) % 12 if month <= 12 else month - 11
         
-        start_range = f'{start_year}-{start_month_num:02d}'
-        end_range = f'{end_year}-{end_month_num:02d}'
+        # 더 간단한 방법: 11개월 전 계산
+        months_back = 11
+        start_year = year
+        start_month_num = month - months_back
         
-        # 범위 내 사용 가능한 월 필터링
-        available_months = [m for m in all_months if start_range <= m <= end_range]
-        print(f'📅 분석 범위: {start_range} ~ {end_range}', flush=True)
-        print(f'📅 사용 가능한 월: {available_months}', flush=True)
+        while start_month_num <= 0:
+            start_month_num += 12
+            start_year -= 1
+        
+        start_month = f'{start_year}-{start_month_num:02d}'
+        
+        # 기준월까지의 최근 12개월 필터링 (실제 데이터 범위 내에서)
+        available_months = [m for m in all_months if start_month <= m <= target_month]
+        
+        # 데이터가 12개월 미만인 경우 사용 가능한 모든 월 사용
+        if len(available_months) < 12:
+            available_months = [m for m in all_months if m <= target_month]
+        
+        print(f'📅 기준월: {target_month}', flush=True)
+        print(f'📅 분석 범위: {available_months[0]} ~ {available_months[-1]} ({len(available_months)}개월)', flush=True)
+        print(f'📅 사용 월: {available_months}', flush=True)
         
         # 기준월 데이터 (메인)
         target_data = cache['full_data'][cache['full_data']['snapshot_month'] == target_month]
         
-        # 전후 1년 데이터 (참고용)
+        # 분석 범위 데이터 (최근 12개월)
         range_data = cache['full_data'][cache['full_data']['snapshot_month'].isin(available_months)]
         
         if len(target_data) == 0:
@@ -357,16 +373,40 @@ def generate_report():
         target_insights = target_analyzer.generate_insights()
         range_insights = range_analyzer.generate_insights()
         
-        # GS차지비 관점 리포트 생성
+        # 리포트 유형별 생성
         generator = AIReportGenerator()
-        report = generator.generate_gs_chargebee_report(
-            target_month=target_month,
-            target_insights=target_insights,
-            range_insights=range_insights,
-            target_data=target_data,
-            range_data=range_data,
-            available_months=available_months
-        )
+        
+        if report_type == 'kpi':
+            report_content = generator.generate_kpi_snapshot_report(
+                target_month=target_month,
+                target_insights=target_insights,
+                target_data=target_data,
+                available_months=available_months
+            )
+        elif report_type == 'cpo':
+            report_content = generator.generate_cpo_ranking_report(
+                target_month=target_month,
+                target_insights=target_insights,
+                target_data=target_data,
+                available_months=available_months
+            )
+        elif report_type == 'trend':
+            report_content = generator.generate_monthly_trend_report(
+                target_month=target_month,
+                range_insights=range_insights,
+                range_data=range_data,
+                available_months=available_months
+            )
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'알 수 없는 리포트 유형: {report_type}'
+            }), 400
+        
+        report = {
+            'type': report_type,
+            'content': report_content
+        }
         
         # 캐시 저장
         cache['report'] = report
