@@ -356,6 +356,18 @@
         
         /* PDF 인쇄 스타일 */
         @media print {
+            body {
+                width: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            
+            .report-section {
+                width: 100%;
+                max-width: 100%;
+                page-break-inside: auto;
+            }
+            
             .pdf-page {
                 page-break-after: always;
                 page-break-inside: avoid;
@@ -366,11 +378,18 @@
             }
             
             .report-content h2.section-title {
-                page-break-before: always;
+                page-break-after: avoid;
+                page-break-inside: avoid;
             }
             
             .report-content h2.section-title:first-of-type {
                 page-break-before: avoid;
+            }
+            
+            .report-content h3,
+            .report-content h4 {
+                page-break-after: avoid;
+                page-break-inside: avoid;
             }
             
             .callout {
@@ -379,6 +398,23 @@
             
             .report-content table {
                 page-break-inside: avoid;
+                width: 100%;
+                font-size: 11px;
+            }
+            
+            .report-content ul,
+            .report-content ol {
+                page-break-inside: avoid;
+            }
+            
+            .report-content li {
+                page-break-inside: avoid;
+            }
+            
+            /* 고아/과부 방지 */
+            .report-content p {
+                orphans: 3;
+                widows: 3;
             }
         }
         
@@ -702,21 +738,8 @@
                     </div>
                 </div>
                 
-                <h3 style="margin-top: 25px; margin-bottom: 15px;">📊 리포트 유형 선택</h3>
-                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                    <button class="btn" onclick="generateReport('kpi')" id="kpiReportBtn" disabled style="flex: 1;">
-                        📊 KPI Report
-                    </button>
-                    <button class="btn" onclick="generateReport('cpo')" id="cpoReportBtn" disabled style="flex: 1;">
-                        🏢 CPO Report
-                    </button>
-                    <button class="btn" onclick="generateReport('trend')" id="trendReportBtn" disabled style="flex: 1;">
-                        📈 Trend Report
-                    </button>
-                </div>
-                
-                <button class="btn btn-primary" onclick="downloadReportPDF()" id="downloadPdfBtn" disabled style="margin-top: 10px;">
-                    📥 PDF 다운로드
+                <button class="btn" onclick="generateAllReports()" id="generateReportBtn" disabled style="margin-top: 15px;">
+                    🤖 리포트 생성 (KPI + CPO + Trend)
                 </button>
                 
                 <!-- 진행도 표시 -->
@@ -730,18 +753,26 @@
             
             <!-- 리포트 유형별 탭 -->
             <div id="reportContainer" class="hidden">
-                 <!-- KPI Report -->
-                <div id="kpiReportContent" class="tab-content active">
-                    <!-- 총 응답시간 표시 영역 -->
+                <!-- 총 응답시간 표시 영역 -->
                 <div id="reportTotalTime" style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 20px;"></div>
                 
+                <!-- 리포트 탭 메뉴 -->
                 <div class="tabs" style="margin-bottom: 0;">
                     <button class="tab active" onclick="switchReportType('kpi', this)">📊 KPI Report</button>
                     <button class="tab" onclick="switchReportType('cpo', this)">🏢 CPO Report</button>
                     <button class="tab" onclick="switchReportType('trend', this)">📈 Trend Report</button>
                 </div>
                 
-                <div class="report-section">
+                <!-- PDF 다운로드 버튼 -->
+                <div style="margin-top: 15px; margin-bottom: 20px;">
+                    <button class="btn btn-secondary" onclick="downloadCurrentReportPDF()" id="downloadPdfBtn">
+                        📥 현재 리포트 PDF 다운로드
+                    </button>
+                </div>
+                
+                <!-- KPI Report -->
+                <div id="kpiReportContent" class="tab-content active">
+                    <div class="report-section">
                         <div class="report-content" id="kpiReport"></div>
                     </div>
                 </div>
@@ -986,24 +1017,27 @@
         // 리포트 기준월 검증
         function validateReportMonth() {
             const targetMonth = document.getElementById('reportTargetMonth').value;
-            const kpiBtn = document.getElementById('kpiReportBtn');
-            const cpoBtn = document.getElementById('cpoReportBtn');
-            const trendBtn = document.getElementById('trendReportBtn');
+            const generateBtn = document.getElementById('generateReportBtn');
             const info = document.getElementById('reportMonthInfo');
             const monthText = document.getElementById('reportMonthText');
+            const reportContainer = document.getElementById('reportContainer');
             
             if (!targetMonth) {
-                kpiBtn.disabled = true;
-                cpoBtn.disabled = true;
-                trendBtn.disabled = true;
+                generateBtn.disabled = true;
                 info.classList.add('hidden');
                 return;
             }
             
+            // 기준월이 변경되었고 캐시에 없으면 리포트 컨테이너 숨기기
+            if (currentReportMonth !== targetMonth && (!reportCache[targetMonth] || Object.keys(reportCache[targetMonth]).length === 0)) {
+                reportContainer.classList.add('hidden');
+            } else if (reportCache[targetMonth] && Object.keys(reportCache[targetMonth]).length > 0) {
+                // 캐시된 리포트가 있으면 표시
+                reportContainer.classList.remove('hidden');
+            }
+            
             // 유효한 월 선택
-            kpiBtn.disabled = false;
-            cpoBtn.disabled = false;
-            trendBtn.disabled = false;
+            generateBtn.disabled = false;
             info.classList.remove('hidden');
             monthText.textContent = `📊 ${targetMonth} 기준 분석 리포트`;
         }
@@ -1822,8 +1856,12 @@
             return html;
         }
         
-        async function generateReport(reportType) {
-            // 선택된 기준월 확인
+        // 리포트 캐시 (기준월별로 저장)
+        let reportCache = {};
+        let currentReportMonth = null;
+        
+        // 모든 리포트 생성 (KPI + CPO + Trend)
+        async function generateAllReports() {
             const targetMonth = document.getElementById('reportTargetMonth').value;
             
             if (!targetMonth) {
@@ -1831,18 +1869,23 @@
                 return;
             }
             
-            console.log('📊 리포트 생성 시작');
+            // 이미 생성된 리포트가 있고 같은 기준월이면 표시만
+            if (currentReportMonth === targetMonth && reportCache[targetMonth]) {
+                console.log('✅ 캐시된 리포트 사용:', targetMonth);
+                document.getElementById('reportContainer').classList.remove('hidden');
+                switchReportType('kpi', document.querySelector('#reportContainer .tabs button'));
+                return;
+            }
+            
+            console.log('📊 전체 리포트 생성 시작');
             console.log('📅 기준월:', targetMonth);
-            console.log('📋 리포트 유형:', reportType);
+            
+            // 전체 시작 시간 기록
+            const totalStartTime = Date.now();
             
             // 버튼 비활성화
-            const kpiBtn = document.getElementById('kpiReportBtn');
-            const cpoBtn = document.getElementById('cpoReportBtn');
-            const trendBtn = document.getElementById('trendReportBtn');
-            
-            kpiBtn.disabled = true;
-            cpoBtn.disabled = true;
-            trendBtn.disabled = true;
+            const generateBtn = document.getElementById('generateReportBtn');
+            generateBtn.disabled = true;
             
             // 진행도 표시
             const progressContainer = document.getElementById('reportProgress');
@@ -1850,28 +1893,101 @@
             const progressText = document.getElementById('reportProgressText');
             
             progressContainer.classList.remove('hidden');
-            
-            // 진행도 시뮬레이션
-            let progress = 0;
-            const progressInterval = setInterval(() => {
-                if (progress < 90) {
-                    progress += Math.random() * 10;
-                    if (progress > 90) progress = 90;
-                    progressBar.style.width = progress + '%';
-                    progressBar.textContent = Math.floor(progress) + '%';
-                    
-                    if (progress < 30) {
-                        progressText.textContent = '📊 데이터 분석 중...';
-                    } else if (progress < 60) {
-                        progressText.textContent = '🤖 AI 리포트 생성 중...';
-                    } else {
-                        progressText.textContent = '✨ 마무리 중...';
-                    }
-                }
-            }, 500);
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
             
             try {
-                // 5분 타임아웃 설정 (AI 리포트 생성은 시간이 오래 걸릴 수 있음)
+                // 3가지 리포트 순차 생성
+                const reportTypes = ['kpi', 'cpo', 'trend'];
+                const reportNames = {
+                    'kpi': 'KPI Report',
+                    'cpo': 'CPO Report',
+                    'trend': 'Trend Report'
+                };
+                
+                // 각 리포트별 소요 시간 저장
+                const reportTimes = {};
+                
+                // 캐시 초기화
+                if (!reportCache[targetMonth]) {
+                    reportCache[targetMonth] = {};
+                }
+                
+                for (let i = 0; i < reportTypes.length; i++) {
+                    const reportType = reportTypes[i];
+                    const progress = Math.floor((i / reportTypes.length) * 100);
+                    
+                    progressBar.style.width = progress + '%';
+                    progressBar.textContent = progress + '%';
+                    progressText.textContent = `🤖 ${reportNames[reportType]} 생성 중... (${i + 1}/3)`;
+                    
+                    const startTime = Date.now();
+                    const success = await generateSingleReport(targetMonth, reportType);
+                    const endTime = Date.now();
+                    
+                    reportTimes[reportType] = (endTime - startTime) / 1000; // 초 단위
+                    
+                    if (!success) {
+                        throw new Error(`${reportNames[reportType]} 생성 실패`);
+                    }
+                }
+                
+                // 전체 종료 시간 계산
+                const totalEndTime = Date.now();
+                const totalTime = (totalEndTime - totalStartTime) / 1000; // 초 단위
+                
+                // 완료
+                progressBar.style.width = '100%';
+                progressBar.textContent = '100%';
+                progressText.textContent = '✅ 모든 리포트 생성 완료!';
+                
+                setTimeout(() => {
+                    progressContainer.classList.add('hidden');
+                }, 2000);
+                
+                // 총 소요 시간 표시
+                const totalTimeDiv = document.getElementById('reportTotalTime');
+                totalTimeDiv.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong>📊 리포트 생성 완료</strong>
+                            <div style="margin-top: 8px; font-size: 13px; color: #718096;">
+                                <span style="margin-right: 15px;">• KPI Report: ${formatTime(reportTimes.kpi)}</span>
+                                <span style="margin-right: 15px;">• CPO Report: ${formatTime(reportTimes.cpo)}</span>
+                                <span>• Trend Report: ${formatTime(reportTimes.trend)}</span>
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 14px; color: #718096;">총 소요 시간</div>
+                            <div style="font-size: 20px; font-weight: 700; color: #667eea; margin-top: 4px;">
+                                ${formatTime(totalTime)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 리포트 컨테이너 표시
+                currentReportMonth = targetMonth;
+                document.getElementById('reportContainer').classList.remove('hidden');
+                
+                // 첫 번째 탭(KPI) 활성화
+                switchReportType('kpi', document.querySelector('#reportContainer .tabs button'));
+                
+                // 버튼 다시 활성화
+                generateBtn.disabled = false;
+                
+            } catch (error) {
+                progressContainer.classList.add('hidden');
+                alert('오류: ' + error.message);
+                generateBtn.disabled = false;
+            }
+        }
+        
+        // 단일 리포트 생성 (내부 함수)
+        async function generateSingleReport(targetMonth, reportType) {
+            try {
+                console.log(`📊 ${reportType} 리포트 생성 시작...`);
+                
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 300000); // 5분
                 
@@ -1886,70 +2002,104 @@
                 });
                 
                 clearTimeout(timeoutId);
+                
+                console.log(`📥 ${reportType} 응답 상태:`, response.status);
+                
+                // HTTP 상태 코드 확인
+                if (!response.ok) {
+                    console.error(`❌ ${reportType} HTTP 오류:`, response.status, response.statusText);
+                    const errorData = await response.json().catch(() => ({ error: response.statusText }));
+                    console.error('오류 상세:', errorData);
+                    return false;
+                }
+                
                 const data = await response.json();
+                console.log(`📦 ${reportType} 응답 데이터:`, data);
                 
-                clearInterval(progressInterval);
-                
-                if (data.success) {
-                    // 진행도 100%
-                    progressBar.style.width = '100%';
-                    progressBar.textContent = '100%';
-                    progressText.textContent = '✅ 리포트 생성 완료!';
-                    
-                    setTimeout(() => {
-                        progressContainer.classList.add('hidden');
-                        progressBar.style.width = '0%';
-                    }, 2000);
-                    
-                    // 리포트 표시 (마크다운 렌더링)
-                    document.getElementById('reportContainer').classList.remove('hidden');
-                    
-                    // 리포트 유형에 따라 해당 탭에 내용 표시
+                if (data.success && data.report && data.report.content) {
+                    // 리포트 내용 렌더링 및 캐시 저장
                     const reportContent = data.report.content || '';
                     const renderedContent = renderMarkdown(reportContent);
                     
+                    console.log(`✅ ${reportType} 렌더링 완료 (${reportContent.length} 자)`);
+                    
+                    // 캐시에 저장
+                    if (!reportCache[targetMonth]) {
+                        reportCache[targetMonth] = {};
+                    }
+                    reportCache[targetMonth][reportType] = renderedContent;
+                    
+                    // DOM에 표시
                     if (reportType === 'kpi') {
                         document.getElementById('kpiReport').innerHTML = renderedContent;
-                        switchReportType('kpi', document.querySelector('.tabs button'));
                     } else if (reportType === 'cpo') {
                         document.getElementById('cpoReport').innerHTML = renderedContent;
-                        switchReportType('cpo', document.querySelector('.tabs button:nth-child(2)'));
                     } else if (reportType === 'trend') {
                         document.getElementById('trendReport').innerHTML = renderedContent;
-                        switchReportType('trend', document.querySelector('.tabs button:nth-child(3)'));
                     }
                     
-                    // 버튼 다시 활성화
-                    kpiBtn.disabled = false;
-                    cpoBtn.disabled = false;
-                    trendBtn.disabled = false;
-                    
-                    // PDF 다운로드 버튼 활성화
-                    document.getElementById('downloadPdfBtn').disabled = false;
+                    console.log(`✅ ${reportType} 리포트 생성 완료`);
+                    return true;
                 } else {
-                    clearInterval(progressInterval);
-                    progressContainer.classList.add('hidden');
-                    alert('오류: ' + data.error);
-                    kpiBtn.disabled = false;
-                    cpoBtn.disabled = false;
-                    trendBtn.disabled = false;
+                    console.error(`❌ ${reportType} 리포트 생성 실패:`, data.error || '알 수 없는 오류');
+                    console.error('응답 데이터:', data);
+                    return false;
                 }
             } catch (error) {
-                clearInterval(progressInterval);
-                progressContainer.classList.add('hidden');
-                alert('오류: ' + error.message);
-                kpiBtn.disabled = false;
-                cpoBtn.disabled = false;
-                trendBtn.disabled = false;
+                console.error(`❌ ${reportType} 리포트 생성 오류:`, error);
+                if (error.name === 'AbortError') {
+                    console.error('타임아웃 (5분 초과)');
+                }
+                return false;
             }
         }
         
-        // PDF 다운로드 함수
-        function downloadReportPDF() {
+        // 기존 generateReport 함수 (호환성 유지)
+        async function generateReport(reportType) {
+            // 선택된 기준월 확인
+            const targetMonth = document.getElementById('reportTargetMonth').value;
+            
+            if (!targetMonth) {
+                alert('기준월을 선택해주세요');
+                return;
+            }
+            
+            console.log('📊 리포트 생성 시작');
+            console.log('📅 기준월:', targetMonth);
+            console.log('📋 리포트 유형:', reportType);
+            
+            // 버튼 비활성화
+            const generateBtn = document.getElementById('generateReportBtn');
+            if (generateBtn) generateBtn.disabled = true;
+            
+            // 단일 리포트 생성 호출
+            const success = await generateSingleReport(targetMonth, reportType);
+            
+            if (success) {
+                document.getElementById('reportContainer').classList.remove('hidden');
+                
+                // 해당 탭으로 전환
+                if (reportType === 'kpi') {
+                    switchReportType('kpi', document.querySelector('#reportContainer .tabs button'));
+                } else if (reportType === 'cpo') {
+                    switchReportType('cpo', document.querySelector('#reportContainer .tabs button:nth-child(2)'));
+                } else if (reportType === 'trend') {
+                    switchReportType('trend', document.querySelector('#reportContainer .tabs button:nth-child(3)'));
+                }
+            } else {
+                alert('리포트 생성에 실패했습니다.');
+            }
+            
+            // 버튼 다시 활성화
+            if (generateBtn) generateBtn.disabled = false;
+        }
+        
+        // 현재 선택된 리포트만 PDF 다운로드
+        function downloadCurrentReportPDF() {
             const reportContainer = document.getElementById('reportContainer');
             
             if (reportContainer.classList.contains('hidden')) {
-                alert('먼저 AI 리포트를 생성해주세요.');
+                alert('먼저 리포트를 생성해주세요.');
                 return;
             }
             
@@ -1968,8 +2118,8 @@
                 reportType = 'Trend';
             }
             
-            if (!activeReport) {
-                alert('활성화된 리포트가 없습니다.');
+            if (!activeReport || !activeReport.innerHTML.trim()) {
+                alert('선택된 리포트가 비어있습니다. 먼저 리포트를 생성해주세요.');
                 return;
             }
             
@@ -1983,17 +2133,22 @@
             const targetMonth = document.getElementById('reportTargetMonth').value || 'report';
             const filename = `EV_Infra_${reportType}_Report_${targetMonth}_${dateStr}.pdf`;
             
-            // PDF 옵션 설정 (한 페이지에 맞춤)
+            // PDF 옵션 설정 (여러 페이지로 자동 분할)
             const opt = {
-                margin: [10, 10, 10, 10],
+                margin: [15, 15, 15, 15],  // 상하좌우 여백 (mm)
                 filename: filename,
-                image: { type: 'jpeg', quality: 0.98 },
+                image: { 
+                    type: 'jpeg', 
+                    quality: 0.95 
+                },
                 html2canvas: { 
-                    scale: 0.8,  // 스케일을 줄여서 한 페이지에 맞춤
+                    scale: 2,  // 고해상도로 렌더링
                     useCORS: true,
                     letterRendering: true,
-                    windowWidth: 1400,
-                    windowHeight: 2000
+                    scrollY: 0,
+                    scrollX: 0,
+                    windowWidth: 1200,  // 렌더링 너비
+                    logging: false
                 },
                 jsPDF: { 
                     unit: 'mm', 
@@ -2002,29 +2157,38 @@
                     compress: true
                 },
                 pagebreak: { 
-                    mode: 'avoid-all'  // 페이지 나누기 방지
+                    mode: ['avoid-all', 'css', 'legacy'],  // CSS 페이지 브레이크 힌트 사용
+                    before: '.report-section h2',  // h2 제목 앞에서 페이지 나누기
+                    after: ['.callout', 'table'],  // 표와 콜아웃 뒤에서 페이지 나누기 고려
+                    avoid: ['tr', 'td']  // 테이블 행/셀은 나누지 않음
                 }
             };
             
             // PDF 생성 및 다운로드
             html2pdf().set(opt).from(activeReport).save().then(() => {
                 downloadBtn.disabled = false;
-                downloadBtn.textContent = '📥 PDF 다운로드';
+                downloadBtn.textContent = '📥 현재 리포트 PDF 다운로드';
             }).catch((error) => {
                 console.error('PDF 생성 오류:', error);
                 alert('PDF 생성 중 오류가 발생했습니다.');
                 downloadBtn.disabled = false;
-                downloadBtn.textContent = '📥 PDF 다운로드';
+                downloadBtn.textContent = '📥 현재 리포트 PDF 다운로드';
             });
+        }
+        
+        // 레거시 함수 (호환성 유지)
+        function downloadReportPDF() {
+            downloadCurrentReportPDF();
         }
         
         // 초를 "X분 X초" 형식으로 변환
         function formatTime(seconds) {
-            if (seconds < 60) {
-                return `${seconds}초`;
+            const roundedSeconds = Math.round(seconds);
+            if (roundedSeconds < 60) {
+                return `${roundedSeconds}초`;
             }
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = (seconds % 60).toFixed(1);
+            const minutes = Math.floor(roundedSeconds / 60);
+            const remainingSeconds = roundedSeconds % 60;
             return `${minutes}분 ${remainingSeconds}초`;
         }
         
