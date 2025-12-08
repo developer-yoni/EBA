@@ -68,8 +68,11 @@ class AIReportGenerator:
     
     def invoke_bedrock(self, prompt, context=''):
         """Bedrock 모델 호출 (리포트 생성용)"""
+        import time
         try:
             print(f'🔄 Bedrock 모델 호출 시작...', flush=True)
+            start_time = time.time()
+            
             system_prompt = f"{context}\n\n{prompt}" if context else prompt
             
             payload = {
@@ -93,7 +96,9 @@ class AIReportGenerator:
             
             response_body = json.loads(response['body'].read())
             result = response_body['content'][0]['text']
-            print(f'✅ Bedrock 응답 완료 ({len(result)} 자)', flush=True)
+            
+            elapsed_time = time.time() - start_time
+            print(f'✅ Bedrock 응답 완료 ({len(result)} 자, ⏱️ {elapsed_time:.2f}초)', flush=True)
             return result
         
         except Exception as e:
@@ -104,7 +109,10 @@ class AIReportGenerator:
     
     def invoke_bedrock_for_query(self, structured_prompt):
         """Bedrock 모델 호출 (커스텀 질의용 - 구조화된 프롬프트 사용)"""
+        import time
         try:
+            start_time = time.time()
+            
             payload = {
                 'anthropic_version': Config.ANTHROPIC_VERSION,
                 'max_tokens': Config.MAX_TOKENS,
@@ -125,11 +133,16 @@ class AIReportGenerator:
             )
             
             response_body = json.loads(response['body'].read())
-            return response_body['content'][0]['text']
+            result = response_body['content'][0]['text']
+            
+            elapsed_time = time.time() - start_time
+            print(f'✅ Bedrock 응답 완료 (⏱️ {elapsed_time:.2f}초)', flush=True)
+            
+            return result, elapsed_time
         
         except Exception as e:
             print(f'❌ Bedrock 호출 오류: {e}')
-            return None
+            return None, 0
     
     def generate_executive_summary(self, insights):
         """경영진 요약 리포트 생성"""
@@ -413,12 +426,14 @@ class AIReportGenerator:
     
     def generate_gs_chargebee_report(self, target_month, target_insights, range_insights, target_data, range_data, available_months):
         """GS차지비 관점 AI 리포트 생성"""
+        import time
         print(f'🤖 GS차지비 관점 AI 리포트 생성 중... (기준월: {target_month})\n')
         
         report = {
             'executive_summary': None,
             'cpo_analysis': None,
-            'trend_forecast': None
+            'trend_forecast': None,
+            'response_times': {}
         }
         
         # GS차지비 데이터 추출
@@ -461,26 +476,33 @@ GS차지비 {target_month} 현황:
         
         # 1. 경영진 요약 (GS차지비 관점)
         print('📝 [1/3] GS차지비 경영진 요약 생성 중...', flush=True)
+        start_time = time.time()
         report['executive_summary'] = self._generate_gs_executive_summary(
             target_month, gs_info, gs_trend, competitor_info, target_insights, available_months
         )
-        print('✅ [1/3] 경영진 요약 완료', flush=True)
+        report['response_times']['executive_summary'] = round(time.time() - start_time, 2)
+        print(f'✅ [1/3] 경영진 요약 완료 (⏱️ {report["response_times"]["executive_summary"]}초)', flush=True)
         
         # 2. 경쟁 분석 (GS차지비 관점)
         print('📝 [2/3] GS차지비 경쟁 분석 생성 중...', flush=True)
+        start_time = time.time()
         report['cpo_analysis'] = self._generate_gs_competitor_analysis(
             target_month, gs_info, gs_trend, competitor_info, target_insights, range_insights
         )
-        print('✅ [2/3] 경쟁 분석 완료', flush=True)
+        report['response_times']['cpo_analysis'] = round(time.time() - start_time, 2)
+        print(f'✅ [2/3] 경쟁 분석 완료 (⏱️ {report["response_times"]["cpo_analysis"]}초)', flush=True)
         
         # 3. 전략 제안 (GS차지비 관점)
         print('📝 [3/3] GS차지비 전략 제안 생성 중...', flush=True)
+        start_time = time.time()
         report['trend_forecast'] = self._generate_gs_strategy(
             target_month, gs_info, gs_trend, competitor_info, range_insights, available_months
         )
-        print('✅ [3/3] 전략 제안 완료', flush=True)
+        report['response_times']['trend_forecast'] = round(time.time() - start_time, 2)
+        print(f'✅ [3/3] 전략 제안 완료 (⏱️ {report["response_times"]["trend_forecast"]}초)', flush=True)
         
-        print('✅ GS차지비 AI 리포트 생성 완료\n', flush=True)
+        total_time = sum(report['response_times'].values())
+        print(f'✅ GS차지비 AI 리포트 생성 완료 (총 ⏱️ {total_time:.2f}초)\n', flush=True)
         return report
     
     def _generate_gs_executive_summary(self, target_month, gs_info, gs_trend, competitor_info, insights, available_months):

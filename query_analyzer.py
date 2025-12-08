@@ -1048,8 +1048,9 @@ JSON만 출력하세요.
             return {'labels': [], 'values': [], 'error': str(e)}
     
     def generate_table_answer(self, query: str, df, kb_context: str, intent: dict,
-                               table_data: dict, show_table: bool = True) -> str:
+                               table_data: dict, show_table: bool = True) -> tuple:
         """표 기반 답변 생성 (시각화 라이브러리 사용 안함)"""
+        import time
         
         labels = table_data.get('labels', [])
         values = table_data.get('values', [])
@@ -1136,6 +1137,8 @@ JSON만 출력하세요.
 """
         
         try:
+            start_time = time.time()
+            
             payload = {
                 'anthropic_version': Config.ANTHROPIC_VERSION,
                 'max_tokens': 2048,
@@ -1151,14 +1154,19 @@ JSON만 출력하세요.
             )
             
             response_body = json.loads(response['body'].read())
-            return response_body['content'][0]['text']
+            result = response_body['content'][0]['text']
+            
+            elapsed_time = time.time() - start_time
+            print(f'✅ Bedrock 응답 완료 (⏱️ {elapsed_time:.2f}초)', flush=True)
+            
+            return result, elapsed_time
             
         except Exception as e:
             # 오류 시 기본 표 형식 답변 반환
             if show_table:
-                return f"데이터 분석 결과입니다.\n{table_md}"
+                return f"데이터 분석 결과입니다.\n{table_md}", 0
             else:
-                return f"데이터 분석 결과: {list(zip(labels, values))}"
+                return f"데이터 분석 결과: {list(zip(labels, values))}", 0
     
     def generate_chart(self, intent: dict, chart_data: dict) -> dict:
         """차트 생성"""
@@ -1183,8 +1191,9 @@ JSON만 출력하세요.
             return {'success': False, 'error': str(e)}
     
     def generate_answer_with_chart(self, query: str, df, kb_context: str, intent: dict, 
-                                    chart_data: dict, chart_result: dict) -> str:
+                                    chart_data: dict, chart_result: dict) -> tuple:
         """차트와 함께 답변 생성"""
+        import time
         
         # 다중 시리즈 여부 확인
         is_multi_series = chart_data.get('multi_series', False)
@@ -1255,6 +1264,8 @@ JSON만 출력하세요.
 """
         
         try:
+            start_time = time.time()
+            
             payload = {
                 'anthropic_version': Config.ANTHROPIC_VERSION,
                 'max_tokens': 2048,
@@ -1270,10 +1281,15 @@ JSON만 출력하세요.
             )
             
             response_body = json.loads(response['body'].read())
-            return response_body['content'][0]['text']
+            result = response_body['content'][0]['text']
+            
+            elapsed_time = time.time() - start_time
+            print(f'✅ Bedrock 응답 완료 (⏱️ {elapsed_time:.2f}초)', flush=True)
+            
+            return result, elapsed_time
             
         except Exception as e:
-            return f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+            return f"답변 생성 중 오류가 발생했습니다: {str(e)}", 0
     
     def _log_separator(self, title: str):
         """로그 구분선 출력"""
@@ -1406,7 +1422,8 @@ JSON만 출력하세요.
                 'query': query,
                 'answer': clarification_msg,
                 'has_chart': False,
-                'needs_clarification': True
+                'needs_clarification': True,
+                'bedrock_time': 0
             }
         
         # ========================================
@@ -1428,7 +1445,8 @@ JSON만 출력하세요.
                 return {
                     'success': False,
                     'error': chart_data['error'],
-                    'has_chart': False
+                    'has_chart': False,
+                    'bedrock_time': 0
                 }
             
             # 데이터 추출 결과 로깅
@@ -1474,7 +1492,7 @@ JSON만 출력하세요.
                 '답변 유형': '차트 분석 + 인사이트'
             })
             
-            answer = self.generate_answer_with_chart(
+            answer, bedrock_time = self.generate_answer_with_chart(
                 query, df, kb_context, intent, chart_data, chart_result
             )
             
@@ -1490,6 +1508,7 @@ JSON만 출력하세요.
             print(f'   ├─ 차트 타입: {intent.get("chart_type")}', flush=True)
             print(f'   ├─ 데이터 소스: S3 캐시 (메모리)', flush=True)
             print(f'   ├─ RAG 사용: {"예" if kb_context else "아니오"} ({len(kb_context)}자)', flush=True)
+            print(f'   ├─ Bedrock 응답 시간: {bedrock_time:.2f}초', flush=True)
             print(f'   └─ 답변 길이: {len(answer)}자', flush=True)
             
             return {
@@ -1500,6 +1519,7 @@ JSON만 출력하세요.
                 'chart_image': chart_result.get('image'),
                 'chart_type': intent.get('chart_type'),
                 'chart_title': intent.get('chart_title'),
+                'bedrock_time': round(bedrock_time, 2),
                 'data_summary': {
                     'labels': chart_data.get('labels', []),
                     'values': chart_data.get('values', []),
@@ -1530,7 +1550,8 @@ JSON만 출력하세요.
                 return {
                     'success': False,
                     'error': table_data['error'],
-                    'has_chart': False
+                    'has_chart': False,
+                    'bedrock_time': 0
                 }
             
             # 다중 시리즈 여부 확인
@@ -1556,7 +1577,7 @@ JSON만 출력하세요.
                 '표 표시': show_table
             })
             
-            answer = self.generate_table_answer(
+            answer, bedrock_time = self.generate_table_answer(
                 query, df, kb_context, intent, table_data, show_table
             )
             
@@ -1572,6 +1593,7 @@ JSON만 출력하세요.
             print(f'   ├─ 표 표시: {show_table}', flush=True)
             print(f'   ├─ 데이터 소스: S3 캐시 (메모리)', flush=True)
             print(f'   ├─ RAG 사용: {"예" if kb_context else "아니오"} ({len(kb_context)}자)', flush=True)
+            print(f'   ├─ Bedrock 응답 시간: {bedrock_time:.2f}초', flush=True)
             print(f'   └─ 답변 길이: {len(answer)}자', flush=True)
             
             return {
@@ -1580,6 +1602,7 @@ JSON만 출력하세요.
                 'answer': answer,
                 'has_chart': False,
                 'show_table': show_table,
+                'bedrock_time': round(bedrock_time, 2),
                 'output_format': output_format,
                 'data_summary': {
                     'labels': table_data.get('labels', []),

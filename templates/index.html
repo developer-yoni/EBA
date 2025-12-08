@@ -550,6 +550,9 @@
             </div>
             
             <div id="reportContainer" class="hidden">
+                <!-- 총 응답시간 표시 영역 -->
+                <div id="reportTotalTime" style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 20px;"></div>
+                
                 <div class="report-section">
                     <h2>📝 경영진 요약</h2>
                     <div class="report-content" id="executiveSummary"></div>
@@ -1517,11 +1520,31 @@
                         progressBar.style.width = '0%';
                     }, 2000);
                     
+                    // 응답 시간 표시 HTML 생성
+                    let summaryTimeHtml = '';
+                    let cpoTimeHtml = '';
+                    let trendTimeHtml = '';
+                    let totalTimeHtml = '';
+                    
+                    if (data.report.response_times) {
+                        const times = data.report.response_times;
+                        const totalTime = (times.executive_summary || 0) + (times.cpo_analysis || 0) + (times.trend_forecast || 0);
+                        
+                        // 각 섹션별 응답 시간 표시
+                        summaryTimeHtml = `<div style="margin-bottom: 15px; padding: 8px 12px; background: #e6f7ff; border-left: 3px solid #1890ff; border-radius: 4px; font-size: 13px; color: #0050b3;"><strong>⏱️ 응답시간:</strong> ${formatTime(times.executive_summary || 0)}</div>`;
+                        cpoTimeHtml = `<div style="margin-bottom: 15px; padding: 8px 12px; background: #e6f7ff; border-left: 3px solid #1890ff; border-radius: 4px; font-size: 13px; color: #0050b3;"><strong>⏱️ 응답시간:</strong> ${formatTime(times.cpo_analysis || 0)}</div>`;
+                        trendTimeHtml = `<div style="margin-bottom: 15px; padding: 8px 12px; background: #e6f7ff; border-left: 3px solid #1890ff; border-radius: 4px; font-size: 13px; color: #0050b3;"><strong>⏱️ 응답시간:</strong> ${formatTime(times.trend_forecast || 0)}</div>`;
+                        
+                        // 총 소요 시간 표시 (커스텀 질의와 동일한 스타일)
+                        totalTimeHtml = `<strong style="color: #48bb78;">총 응답시간:</strong> ${formatTime(totalTime)}`;
+                    }
+                    
                     // 리포트 표시 (마크다운 렌더링)
                     document.getElementById('reportContainer').classList.remove('hidden');
-                    document.getElementById('executiveSummary').innerHTML = renderMarkdown(data.report.executive_summary || '생성 중...');
-                    document.getElementById('cpoAnalysis').innerHTML = renderMarkdown(data.report.cpo_analysis || '데이터 없음');
-                    document.getElementById('trendForecast').innerHTML = renderMarkdown(data.report.trend_forecast || '데이터 없음');
+                    document.getElementById('reportTotalTime').innerHTML = totalTimeHtml;
+                    document.getElementById('executiveSummary').innerHTML = summaryTimeHtml + renderMarkdown(data.report.executive_summary || '생성 중...');
+                    document.getElementById('cpoAnalysis').innerHTML = cpoTimeHtml + renderMarkdown(data.report.cpo_analysis || '데이터 없음');
+                    document.getElementById('trendForecast').innerHTML = trendTimeHtml + renderMarkdown(data.report.trend_forecast || '데이터 없음');
                     
                     // 버튼 다시 활성화
                     reportBtn.disabled = false;
@@ -1594,6 +1617,16 @@
             });
         }
         
+        // 초를 "X분 X초" 형식으로 변환
+        function formatTime(seconds) {
+            if (seconds < 60) {
+                return `${seconds}초`;
+            }
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = (seconds % 60).toFixed(1);
+            return `${minutes}분 ${remainingSeconds}초`;
+        }
+        
         async function submitQuery() {
             const query = document.getElementById('queryInput').value;
             if (!query) return;
@@ -1621,10 +1654,18 @@
                 });
                 
                 const data = await response.json();
+                console.log('📊 API 응답 데이터:', data);
+                console.log('⏱️ bedrock_time:', data.bedrock_time);
                 
                 if (data.success) {
                     // 답변을 마크다운으로 렌더링
                     const renderedAnswer = renderMarkdown(data.answer);
+                    
+                    // 응답 시간 텍스트 생성 (질문과 동일한 스타일, 녹색)
+                    let responseTimeHtml = '';
+                    if (data.bedrock_time !== undefined && data.bedrock_time !== null) {
+                        responseTimeHtml = `<strong style="color: #48bb78;">응답시간:</strong> ${formatTime(data.bedrock_time)}<br><br>`;
+                    }
                     
                     // 차트가 있는 경우
                     let chartHtml = '';
@@ -1645,9 +1686,9 @@
                     resultDiv.innerHTML = `
                         <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-top: 10px;">
                             <strong style="color: #667eea;">질문:</strong> ${data.query}<br><br>
+                            ${responseTimeHtml}
                             ${chartHtml}
-                            <strong style="color: #48bb78;">답변:</strong><br>
-                            <div class="report-content" style="margin-top: 10px;">${renderedAnswer}</div>
+                            <div class="report-content">${renderedAnswer}</div>
                             ${data.has_chart ? '<p style="font-size: 11px; color: #999; margin-top: 10px;">💡 차트는 코드 인터프리터로 동적 생성되었습니다</p>' : ''}
                         </div>
                     `;

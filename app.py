@@ -425,7 +425,8 @@ def custom_query():
                 'success': True,
                 'query': query,
                 'answer': result.get('answer'),
-                'has_chart': result.get('has_chart', False)
+                'has_chart': result.get('has_chart', False),
+                'bedrock_time': result.get('bedrock_time', 0)
             }
             
             # 차트 이미지가 있으면 추가
@@ -455,6 +456,9 @@ def custom_query():
 
 def _legacy_query_handler(query):
     """기존 텍스트 기반 질의 처리 (차트 불필요 시)"""
+    import time
+    start_time = time.time()
+    
     generator = AIReportGenerator()
     
     # Knowledge Base 검색 (배경 지식)
@@ -535,13 +539,16 @@ def _legacy_query_handler(query):
 한국어로 답변해주세요.
 """
     
-    answer = generator.invoke_bedrock_for_query(structured_prompt)
+    answer, bedrock_time = generator.invoke_bedrock_for_query(structured_prompt)
+    total_time = time.time() - start_time
     
     return jsonify({
         'success': True,
         'query': query,
         'answer': answer,
-        'has_chart': False
+        'has_chart': False,
+        'response_time': round(total_time, 2),
+        'bedrock_time': round(bedrock_time, 2)
     })
 
 def initialize_data():
