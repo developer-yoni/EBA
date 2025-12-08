@@ -681,6 +681,12 @@ GS차지비 {target_month} 현황:
 - 급속충전기: {summary.get('fast_chargers', 'N/A')}기 ({summary.get('fast_ratio', 'N/A')}%)
 """
         
+        # 날짜 정보를 명확하게 추출
+        report_start_month = available_months[0]
+        report_end_month = available_months[-1]
+        report_target_month = target_month
+        report_period_count = len(available_months)
+        
         prompt = f"""
 <role>
 당신은 한국 EV 충전 인프라 데이터를 기반으로 경영진이 보는 수준의 시각적·정리형 리포트를 작성하는 시니어 데이터 애널리스트이자 리포트 디자이너입니다.
@@ -693,7 +699,17 @@ GS차지비 {target_month} 현황:
 - 차량 수, 매출, 이용률, 충전건수, 고객 세그먼트 등 "지금 주어진 데이터로는 알 수 없는 항목"은 절대로 만들어내지 마십시오.
 </context>
 
-## 기준월: {target_month}
+## ⚠️⚠️⚠️ 날짜 정보 - 반드시 이 날짜만 사용하세요! ⚠️⚠️⚠️
+
+**분석 기간 시작:** {report_start_month}
+**분석 기간 종료:** {report_end_month}
+**기준월 (최신 데이터):** {report_target_month}
+**분석 개월 수:** {report_period_count}개월
+
+⚠️ 리포트에서 날짜를 언급할 때는 반드시 위의 날짜만 사용하세요.
+⚠️ 절대로 2024-10, 2024-09 같은 다른 날짜를 만들거나 추측하지 마세요.
+
+## 기준월: {report_target_month}
 
 ## 전국 충전 인프라 현황
 {market_summary}
@@ -710,6 +726,8 @@ GS차지비 {target_month} 현황:
 
 이 리포트는 한 기준월({target_month})을 기준으로 전국 EV 충전 인프라의 "단면(KPI 스냅샷)"을 정리하는 리포트입니다.
 
+**중요: 기준월은 {target_month}입니다. 리포트 내용에서 날짜를 언급할 때는 반드시 {target_month}를 사용하세요.**
+
 **주요 내용:**
 - 국가 전체 총 충전소 수, 완속/급속/총 충전기 수 (KPI)
 - 전월 대비 증감 수치
@@ -717,14 +735,24 @@ GS차지비 {target_month} 현황:
 - 상위 CPO 집중도(Top N 비중) 요약
 - GS차지비의 순위, 규모, 전체 대비 비중 요약
 
-**중요: 리포트는 반드시 아래 HTML 타이틀로 시작해야 합니다. 절대로 수정하지 마세요:**
+**날짜 표기 규칙:**
+- 기준월을 언급할 때는 반드시 "{target_month}"를 사용하세요.
+- 다른 날짜(예: 2024-10)를 임의로 만들지 마세요.
+- 위에 제공된 데이터의 날짜만 사용하세요.
+
+**중요: 리포트는 반드시 아래 HTML 타이틀로 정확히 시작해야 합니다:**
 
 <div align="center">
 <h1>📊 EV Infra KPI Report</h1>
-<p style="color: #666; font-size: 14px;">분석 기간: {available_months[0]} ~ {available_months[-1]} ({len(available_months)}개월) | 기준월: {target_month}</p>
+<p style="color: #666; font-size: 14px;">분석 기간: {report_start_month} ~ {report_end_month} ({report_period_count}개월) | 기준월: {report_target_month}</p>
 </div>
 
-**경고: 위 HTML 타이틀의 분석 기간을 절대로 변경하지 마세요. 그대로 복사해서 사용하세요.**
+**⚠️ 위 HTML을 그대로 복사하세요. 날짜를 절대 변경하지 마세요:**
+- {report_start_month} (분석 시작)
+- {report_end_month} (분석 종료)  
+- {report_target_month} (기준월)
+
+이 날짜들만 사용하고, 다른 날짜(예: 2024-10)를 절대 만들지 마세요.
 
 **레이아웃 규칙:**
 
@@ -755,6 +783,10 @@ GS차지비 {target_month} 현황:
 **할루시네이션 방지:**
 - 오직 "충전소 수, 완속/급속/총 충전기 수" 데이터에서 계산 가능한 사실만 사용
 - 전망/해석 시 반드시 관련 수치를 먼저 제시한 뒤 "이 수치를 기반으로 볼 때 ~로 해석될 수 있습니다."와 같이 추론임을 명시
+
+**금지 사항:**
+- 차트 제안 문장을 작성하지 마세요 (예: "📊 차트 제안:", "라인 차트로 시각화하면" 등)
+- 시각화 관련 제안을 하지 마세요
 
 **리포트 구조:**
 
@@ -790,6 +822,12 @@ GS차지비 {target_month} 현황:
     def generate_cpo_ranking_report(self, target_month, target_insights, target_data, available_months):
         """CPO Ranking & GS차지비 Positioning Report 생성"""
         print(f'🏢 CPO Ranking Report 생성 중... (기준월: {target_month})', flush=True)
+        
+        # 날짜 정보를 명확하게 추출
+        report_start_month = available_months[0]
+        report_end_month = available_months[-1]
+        report_target_month = target_month
+        report_period_count = len(available_months)
         
         # GS차지비 데이터 추출
         gs_data = target_data[target_data['CPO명'] == 'GS차지비'] if 'CPO명' in target_data.columns else None
@@ -853,7 +891,17 @@ GS차지비 {target_month} 상세:
 - 차량 수, 매출, 이용률, 충전건수, 고객 세그먼트 등 "지금 주어진 데이터로는 알 수 없는 항목"은 절대로 만들어내지 마십시오.
 </context>
 
-## 기준월: {target_month}
+## ⚠️⚠️⚠️ 날짜 정보 - 반드시 이 날짜만 사용하세요! ⚠️⚠️⚠️
+
+**분석 기간 시작:** {report_start_month}
+**분석 기간 종료:** {report_end_month}
+**기준월 (최신 데이터):** {report_target_month}
+**분석 개월 수:** {report_period_count}개월
+
+⚠️ 리포트에서 날짜를 언급할 때는 반드시 위의 날짜만 사용하세요.
+⚠️ 절대로 2024-10, 2024-09 같은 다른 날짜를 만들거나 추측하지 마세요.
+
+## 기준월: {report_target_month}
 
 ## 전국 시장 구조
 {market_structure}
@@ -868,7 +916,9 @@ GS차지비 {target_month} 상세:
 
 **리포트 유형: EV Infra CPO Ranking & GS차지비 Positioning Report**
 
-이 리포트는 같은 기준월({target_month})을 기준으로 CPO별 순위/규모/구조를 상세히 보는 "사업자 관점" 리포트입니다.
+이 리포트는 같은 기준월({report_target_month})을 기준으로 CPO별 순위/규모/구조를 상세히 보는 "사업자 관점" 리포트입니다.
+
+**중요: 기준월은 {report_target_month}입니다. 리포트 내용에서 날짜를 언급할 때는 반드시 {report_target_month}를 사용하세요.**
 
 **주요 내용:**
 - CPO별 충전기 수 기준 랭킹 표 (Top 10~15)
@@ -880,14 +930,24 @@ GS차지비 {target_month} 상세:
   - 완속/급속 구조 특징
   - "Efficiency vs Coverage" 축으로 주요 경쟁사와 GS차지비 포지션 비교
 
-**중요: 리포트는 반드시 아래 HTML 타이틀로 시작해야 합니다. 절대로 수정하지 마세요:**
+**날짜 표기 규칙:**
+- 기준월을 언급할 때는 반드시 "{target_month}"를 사용하세요.
+- 다른 날짜를 임의로 만들지 마세요.
+- 위에 제공된 데이터의 날짜만 사용하세요.
+
+**중요: 리포트는 반드시 아래 HTML 타이틀로 정확히 시작해야 합니다:**
 
 <div align="center">
 <h1>📈 EV Infra CPO Market Report</h1>
-<p style="color: #666; font-size: 14px;">분석 기간: {available_months[0]} ~ {available_months[-1]} ({len(available_months)}개월) | 기준월: {target_month}</p>
+<p style="color: #666; font-size: 14px;">분석 기간: {report_start_month} ~ {report_end_month} ({report_period_count}개월) | 기준월: {report_target_month}</p>
 </div>
 
-**경고: 위 HTML 타이틀의 분석 기간을 절대로 변경하지 마세요. 그대로 복사해서 사용하세요.**
+**⚠️ 위 HTML을 그대로 복사하세요. 날짜를 절대 변경하지 마세요:**
+- {report_start_month} (분석 시작)
+- {report_end_month} (분석 종료)  
+- {report_target_month} (기준월)
+
+이 날짜들만 사용하고, 다른 날짜(예: 2024-10)를 절대 만들지 마세요.
 
 **레이아웃 규칙:**
 
@@ -917,6 +977,10 @@ GS차지비 {target_month} 상세:
 **할루시네이션 방지:**
 - 오직 충전소/충전기 수 데이터만 사용
 - 해석 시 반드시 수치 먼저 제시 후 추론임을 명시
+
+**금지 사항:**
+- 차트 제안 문장을 작성하지 마세요 (예: "📊 차트 제안:", "라인 차트로 시각화하면" 등)
+- 시각화 관련 제안을 하지 마세요
 
 **리포트 구조:**
 
@@ -964,6 +1028,12 @@ GS차지비 {target_month} 상세:
     def generate_monthly_trend_report(self, target_month, range_insights, range_data, available_months):
         """Monthly Trend Report 생성 - 시계열 분석 중심"""
         print(f'📈 Monthly Trend Report 생성 중... (기준월: {target_month})', flush=True)
+        
+        # 날짜 정보를 명확하게 추출
+        report_start_month = available_months[0]
+        report_end_month = available_months[-1]
+        report_target_month = target_month
+        report_period_count = len(available_months)
         
         # 월별 추이 데이터 추출
         monthly_trend = ""
@@ -1016,8 +1086,18 @@ GS차지비 {target_month} 상세:
 - 차량 수, 매출, 이용률, 충전건수, 고객 세그먼트 등 "지금 주어진 데이터로는 알 수 없는 항목"은 절대로 만들어내지 마십시오.
 </context>
 
-## 분석 기간: {available_months[0]} ~ {available_months[-1]} ({len(available_months)}개월)
-## 기준월: {target_month}
+## ⚠️⚠️⚠️ 날짜 정보 - 반드시 이 날짜만 사용하세요! ⚠️⚠️⚠️
+
+**분석 기간 시작:** {report_start_month}
+**분석 기간 종료:** {report_end_month}
+**기준월 (최신 데이터):** {report_target_month}
+**분석 개월 수:** {report_period_count}개월
+
+⚠️ 리포트에서 날짜를 언급할 때는 반드시 위의 날짜만 사용하세요.
+⚠️ 절대로 2024-10, 2024-09 같은 다른 날짜를 만들거나 추측하지 마세요.
+
+## 분석 기간: {report_start_month} ~ {report_end_month} ({report_period_count}개월)
+## 기준월: {report_target_month}
 
 ## 월별 전국 충전 인프라 추이
 {monthly_trend}
@@ -1034,6 +1114,8 @@ GS차지비 {target_month} 상세:
 
 이 리포트는 여러 달에 걸친 "월별 데이터"를 사용하여 국가 전체 및 GS차지비의 트렌드를 보는 시계열 리포트입니다.
 
+**중요: 기준월은 {report_target_month}입니다. 최신 데이터를 언급할 때는 반드시 {report_target_month}를 사용하세요.**
+
 **주요 내용:**
 - 국가 전체 총 충전기/충전소의 월별 증가 추이 (표 + 추세 설명)
 - 완속/급속 충전기의 월별 증감·성장률 요약
@@ -1042,14 +1124,24 @@ GS차지비 {target_month} 상세:
   - 전체 시장 내 비중(점유율) 변화
 - "전국 vs GS차지비" 성장 속도 비교
 
-**중요: 리포트는 반드시 아래 HTML 타이틀로 시작해야 합니다. 절대로 수정하지 마세요:**
+**날짜 표기 규칙:**
+- 기준월(최신 데이터)을 언급할 때는 반드시 "{report_target_month}"를 사용하세요.
+- 다른 날짜를 임의로 만들지 마세요.
+- 위에 제공된 월별 데이터의 날짜만 사용하세요.
+
+**중요: 리포트는 반드시 아래 HTML 타이틀로 정확히 시작해야 합니다:**
 
 <div align="center">
 <h1>🔍 EV Infra Trend Report</h1>
-<p style="color: #666; font-size: 14px;">분석 기간: {available_months[0]} ~ {available_months[-1]} ({len(available_months)}개월) | 기준월: {target_month}</p>
+<p style="color: #666; font-size: 14px;">분석 기간: {report_start_month} ~ {report_end_month} ({report_period_count}개월) | 기준월: {report_target_month}</p>
 </div>
 
-**경고: 위 HTML 타이틀의 분석 기간을 절대로 변경하지 마세요. 그대로 복사해서 사용하세요.**
+**⚠️ 위 HTML을 그대로 복사하세요. 날짜를 절대 변경하지 마세요:**
+- {report_start_month} (분석 시작)
+- {report_end_month} (분석 종료)  
+- {report_target_month} (기준월)
+
+이 날짜들만 사용하고, 다른 날짜(예: 2024-10)를 절대 만들지 마세요.
 
 **레이아웃 규칙:**
 
@@ -1071,12 +1163,13 @@ GS차지비 {target_month} 상세:
 |-------|----------------|----|----|------------|-------------|
 | 2024-12 | 450,000 | 380,000 | 70,000 | +5,000 | +1.1% |
 
-5) 차트 제안:
-- "월별 total chargers 추이를 라인 차트로 시각화하면 감소 전환 시점을 쉽게 확인할 수 있습니다."
-
-6) GS차지비 트렌드 분석:
+5) GS차지비 트렌드 분석:
 - 월별 점유율 변화
 - 전국 대비 성장 속도 비교
+
+**금지 사항:**
+- 차트 제안 문장을 작성하지 마세요 (예: "📊 차트 제안:", "라인 차트로 시각화하면" 등)
+- 시각화 관련 제안을 하지 마세요
 
 **할루시네이션 방지:**
 - 오직 충전소/충전기 수 데이터만 사용
