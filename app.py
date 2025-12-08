@@ -278,10 +278,130 @@ def get_dashboard():
         excel_changes = loader.get_all_months_charger_changes()
         print(f'📊 엑셀에서 추출한 증감값: {len(excel_changes)}개월', flush=True)
         
+        # GS차지비 KPI 데이터 생성
+        gs_kpi = None
+        if current_data is not None and len(current_data) > 0 and end_month:
+            gs_data = current_data[current_data['CPO명'] == 'GS차지비']
+            if len(gs_data) > 0:
+                # 종료월 데이터
+                end_data = gs_data[gs_data['snapshot_month'] == end_month]
+                if len(end_data) > 0:
+                    end_row = end_data.iloc[0]
+                    
+                    # 현재 시장점유율 파싱
+                    try:
+                        current_share_raw = end_row.get('시장점유율', '0%')
+                        print(f'📊 GS차지비 시장점유율 원본값: {current_share_raw}, 타입: {type(current_share_raw)}', flush=True)
+                        
+                        if isinstance(current_share_raw, str):
+                            current_share = float(current_share_raw.replace('%', '').strip())
+                        else:
+                            # 이미 숫자인 경우 (0.168 같은 형식)
+                            current_share = float(current_share_raw) * 100 if current_share_raw < 1 else float(current_share_raw)
+                        
+                        print(f'📊 GS차지비 시장점유율 파싱 결과: {current_share}%', flush=True)
+                    except Exception as e:
+                        print(f'⚠️ 시장점유율 파싱 오류: {e}, 원본값: {end_row.get("시장점유율")}', flush=True)
+                        current_share = 0.0
+                    
+                    # 현재 값
+                    current_kpi = {
+                        'market_share': round(current_share, 1),
+                        'stations': int(end_row.get('충전소수', 0)),
+                        'slow_chargers': int(end_row.get('완속충전기', 0)),
+                        'fast_chargers': int(end_row.get('급속충전기', 0)),
+                        'total_chargers': int(end_row.get('총충전기', 0))
+                    }
+                    
+                    # 전월 대비 증감량 계산
+                    # 전월 찾기
+                    all_months = sorted(gs_data['snapshot_month'].unique().tolist())
+                    monthly_change = {
+                        'prev_month': None,
+                        'current_month': end_month,
+                        'market_share_change': 0,
+                        'stations': int(end_row.get('충전소증감', 0)),
+                        'slow_chargers': int(end_row.get('완속증감', 0)),
+                        'fast_chargers': int(end_row.get('급속증감', 0)),
+                        'total_chargers': int(end_row.get('총증감', 0))
+                    }
+                    
+                    if end_month in all_months:
+                        current_idx = all_months.index(end_month)
+                        if current_idx > 0:
+                            prev_month = all_months[current_idx - 1]
+                            prev_data = gs_data[gs_data['snapshot_month'] == prev_month]
+                            if len(prev_data) > 0:
+                                prev_row = prev_data.iloc[0]
+                                monthly_change['prev_month'] = prev_month
+                                
+                                # 전월 시장점유율
+                                try:
+                                    prev_share_raw = prev_row.get('시장점유율', '0%')
+                                    print(f'📊 전월({prev_month}) 시장점유율 원본값: {prev_share_raw}, 타입: {type(prev_share_raw)}', flush=True)
+                                    
+                                    if isinstance(prev_share_raw, str):
+                                        prev_share = float(prev_share_raw.replace('%', '').strip())
+                                    else:
+                                        prev_share = float(prev_share_raw) * 100 if prev_share_raw < 1 else float(prev_share_raw)
+                                    
+                                    print(f'📊 전월({prev_month}) 시장점유율 파싱 결과: {prev_share}%', flush=True)
+                                    print(f'📊 현재월({end_month}) 시장점유율: {current_share}%', flush=True)
+                                    
+                                    share_change = round(current_share - prev_share, 1)
+                                    print(f'📊 시장점유율 증감량: {current_share}% - {prev_share}% = {share_change}%p', flush=True)
+                                    
+                                    monthly_change['market_share_change'] = share_change
+                                except Exception as e:
+                                    print(f'⚠️ 전월 시장점유율 파싱 오류: {e}', flush=True)
+                                    monthly_change['market_share_change'] = 0
+                    
+                    # 기간 증감량
+                    period_change = None
+                    if start_month:
+                        start_data = gs_data[gs_data['snapshot_month'] == start_month]
+                        if len(start_data) > 0:
+                            start_row = start_data.iloc[0]
+                            
+                            # 시장점유율 변화
+                            try:
+                                start_share_raw = start_row.get('시장점유율', '0%')
+                                if isinstance(start_share_raw, str):
+                                    start_share = float(start_share_raw.replace('%', '').strip())
+                                else:
+                                    start_share = float(start_share_raw) * 100 if start_share_raw < 1 else float(start_share_raw)
+                                
+                                end_share_raw = end_row.get('시장점유율', '0%')
+                                if isinstance(end_share_raw, str):
+                                    end_share = float(end_share_raw.replace('%', '').strip())
+                                else:
+                                    end_share = float(end_share_raw) * 100 if end_share_raw < 1 else float(end_share_raw)
+                                
+                                share_change = round(end_share - start_share, 1)
+                            except Exception as e:
+                                print(f'⚠️ 기간 시장점유율 변화 계산 오류: {e}', flush=True)
+                                share_change = 0
+                            
+                            period_change = {
+                                'market_share_change': share_change,
+                                'stations': int(end_row.get('충전소수', 0)) - int(start_row.get('충전소수', 0)),
+                                'slow_chargers': int(end_row.get('완속충전기', 0)) - int(start_row.get('완속충전기', 0)),
+                                'fast_chargers': int(end_row.get('급속충전기', 0)) - int(start_row.get('급속충전기', 0)),
+                                'total_chargers': int(end_row.get('총충전기', 0)) - int(start_row.get('총충전기', 0))
+                            }
+                    
+                    gs_kpi = {
+                        'current': current_kpi,
+                        'monthly_change': monthly_change,
+                        'period_change': period_change
+                    }
+                    print(f'📊 GS차지비 KPI 생성 완료', flush=True)
+        
         # 대시보드 데이터 구성 (선택한 기간 기준)
         dashboard = {
             'summary': current_insights.get('summary'),
             'summary_table': summary_table,
+            'gs_kpi': gs_kpi,
             'top_performers': current_insights.get('top_performers'),
             'target_month': target_month,
             'start_month': start_month,
@@ -948,6 +1068,135 @@ def _legacy_query_handler(query):
         'response_time': round(total_time, 2),
         'bedrock_time': round(bedrock_time, 2)
     })
+
+@app.route('/api/gs-kpi', methods=['POST'])
+def get_gs_kpi():
+    """GS차지비 KPI 데이터 조회"""
+    try:
+        data = request.json
+        start_month = data.get('startMonth')
+        end_month = data.get('endMonth')
+        target_month = data.get('targetMonth', end_month)
+        
+        if cache['full_data'] is None:
+            return jsonify({
+                'success': False,
+                'error': '먼저 데이터를 로드해주세요'
+            }), 400
+        
+        df = cache['full_data']
+        
+        print(f'📊 GS-KPI: 전체 데이터 행 수: {len(df)}', flush=True)
+        print(f'📊 GS-KPI: CPO명 컬럼 존재: {"CPO명" in df.columns}', flush=True)
+        
+        # GS차지비 데이터 필터링
+        gs_data = df[df['CPO명'] == 'GS차지비'].copy()
+        
+        print(f'📊 GS-KPI: GS차지비 데이터 행 수: {len(gs_data)}', flush=True)
+        
+        if len(gs_data) == 0:
+            # CPO명 샘플 출력
+            sample_cpos = df['CPO명'].dropna().unique()[:10]
+            print(f'📊 GS-KPI: CPO명 샘플: {sample_cpos}', flush=True)
+            return jsonify({
+                'success': False,
+                'error': 'GS차지비 데이터를 찾을 수 없습니다'
+            }), 404
+        
+        # 기준월 데이터
+        current_data = gs_data[gs_data['snapshot_month'] == target_month]
+        if len(current_data) == 0:
+            return jsonify({
+                'success': False,
+                'error': f'{target_month} GS차지비 데이터를 찾을 수 없습니다'
+            }), 404
+        
+        current_row = current_data.iloc[0]
+        
+        # 현재 값
+        current_kpi = {
+            'market_share': current_row.get('시장점유율', 'N/A'),
+            'stations': int(current_row.get('충전소수', 0)),
+            'slow_chargers': int(current_row.get('완속충전기', 0)),
+            'fast_chargers': int(current_row.get('급속충전기', 0)),
+            'total_chargers': int(current_row.get('총충전기', 0))
+        }
+        
+        # 전월 대비 증감량
+        monthly_change = None
+        all_months = sorted(gs_data['snapshot_month'].unique().tolist())
+        if target_month in all_months:
+            current_idx = all_months.index(target_month)
+            if current_idx > 0:
+                prev_month = all_months[current_idx - 1]
+                prev_data = gs_data[gs_data['snapshot_month'] == prev_month]
+                if len(prev_data) > 0:
+                    prev_row = prev_data.iloc[0]
+                    
+                    # 시장점유율 변화 계산
+                    current_share = current_row.get('시장점유율', '0%')
+                    prev_share = prev_row.get('시장점유율', '0%')
+                    
+                    # 퍼센트 문자열을 숫자로 변환
+                    try:
+                        current_share_num = float(str(current_share).replace('%', ''))
+                        prev_share_num = float(str(prev_share).replace('%', ''))
+                        share_change = round(current_share_num - prev_share_num, 1)
+                    except:
+                        share_change = 0
+                    
+                    monthly_change = {
+                        'prev_month': prev_month,
+                        'current_month': target_month,
+                        'market_share_change': share_change,
+                        'stations': int(current_row.get('충전소증감', 0)),
+                        'slow_chargers': int(current_row.get('완속증감', 0)),
+                        'fast_chargers': int(current_row.get('급속증감', 0)),
+                        'total_chargers': int(current_row.get('총증감', 0))
+                    }
+        
+        # 기간 증감량 (시작월 ~ 종료월)
+        period_change = None
+        if start_month and end_month:
+            start_data = gs_data[gs_data['snapshot_month'] == start_month]
+            end_data = gs_data[gs_data['snapshot_month'] == end_month]
+            
+            if len(start_data) > 0 and len(end_data) > 0:
+                start_row = start_data.iloc[0]
+                end_row = end_data.iloc[0]
+                
+                # 시장점유율 변화
+                try:
+                    start_share = float(str(start_row.get('시장점유율', '0%')).replace('%', ''))
+                    end_share = float(str(end_row.get('시장점유율', '0%')).replace('%', ''))
+                    share_change = round(end_share - start_share, 1)
+                except:
+                    share_change = 0
+                
+                period_change = {
+                    'market_share_change': share_change,
+                    'stations': int(end_row.get('충전소수', 0)) - int(start_row.get('충전소수', 0)),
+                    'slow_chargers': int(end_row.get('완속충전기', 0)) - int(start_row.get('완속충전기', 0)),
+                    'fast_chargers': int(end_row.get('급속충전기', 0)) - int(start_row.get('급속충전기', 0)),
+                    'total_chargers': int(end_row.get('총충전기', 0)) - int(start_row.get('총충전기', 0))
+                }
+        
+        return jsonify({
+            'success': True,
+            'gs_kpi': {
+                'current': current_kpi,
+                'monthly_change': monthly_change,
+                'period_change': period_change
+            }
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 def initialize_data():
     """앱 시작 시 자동으로 모든 데이터 로드"""

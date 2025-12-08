@@ -678,6 +678,7 @@
         
         <!-- 데이터 대시보드 탭 -->
         <div id="dashboardTab" class="tab-content active">
+            <!-- 분석 기간 선택 -->
             <div class="card" style="margin-bottom: 20px;">
                 <h3>📅 분석 기간 선택</h3>
                 <p style="color: #718096; margin-bottom: 15px;">시작월과 종료월을 선택하세요 (최대 1년)</p>
@@ -711,25 +712,20 @@
                 </button>
             </div>
             
-            <div class="grid" id="statsGrid" style="display: none;">
-                <div class="card">
-                    <h3>📈 데이터 현황</h3>
-                    <div id="dataStats"></div>
-                </div>
-                <div class="card">
-                    <h3>📅 스냅샷 정보</h3>
-                    <div id="snapshotInfo"></div>
-                </div>
-            </div>
-            
             <div id="dashboardContainer" class="hidden" style="margin-top: 30px;">
             <div class="report-section">
                 <h2>📊 데이터 대시보드</h2>
                 
-                <!-- 핵심 요약 -->
+                <!-- 충전인프라 KPI -->
                 <div class="card" style="margin-bottom: 20px;">
-                    <h3>🎯 핵심 요약</h3>
+                    <h3>🎯 충전인프라 KPI</h3>
                     <div id="dashboardSummary"></div>
+                </div>
+                
+                <!-- GS차지비 KPI 테이블 -->
+                <div class="card" style="margin-bottom: 20px;">
+                    <h3>🏆 GS차지비 KPI</h3>
+                    <div id="gsKpiTable"></div>
                 </div>
                 
                 <!-- 차트 그리드 -->
@@ -1153,6 +1149,8 @@
                     console.log('📝 상태 텍스트 설정:', statusText);
                     document.getElementById('dataStatus').textContent = statusText;
                     
+
+                    
                     // 버튼 활성화
                     document.getElementById('dashboardBtn').disabled = false;
                     const reportBtn = document.getElementById('reportBtn');
@@ -1260,21 +1258,11 @@
         function displayDataInfo(data, isMultiMonth) {
             // 데이터 분석이 완료되었으면 대시보드 버튼 활성화
             if (data.analyzed) {
-                document.getElementById('dashboardBtn').disabled = false;
-                document.getElementById('reportBtn').disabled = false;
+                const dashboardBtn = document.getElementById('dashboardBtn');
+                const reportBtn = document.getElementById('reportBtn');
+                if (dashboardBtn) dashboardBtn.disabled = false;
+                if (reportBtn) reportBtn.disabled = false;
             }
-            
-            // 데이터 정보 표시
-            document.getElementById('statsGrid').style.display = 'grid';
-            document.getElementById('dataStats').innerHTML = `
-                <p><strong>총 레코드:</strong> ${data.rows.toLocaleString()}개</p>
-                ${isMultiMonth ? `<p><strong>포함 월:</strong> ${data.total_months}개월</p>` : ''}
-            `;
-            document.getElementById('snapshotInfo').innerHTML = `
-                <p><strong>기준월:</strong> ${data.snapshot_month || data.latest_month || 'N/A'}</p>
-                ${data.snapshot_date ? `<p><strong>기준일:</strong> ${data.snapshot_date}</p>` : ''}
-                ${isMultiMonth && data.unique_months ? `<p><strong>기간:</strong> ${data.unique_months[data.unique_months.length-1]} ~ ${data.unique_months[0]}</p>` : ''}
-            `;
         }
         
         async function showDashboard() {
@@ -1314,21 +1302,31 @@
                     console.log('✅ 대시보드 표시');
                     displayDashboard(data.dashboard);
                     
-                    // 데이터 정보 표시
-                    document.getElementById('statsGrid').style.display = 'grid';
-                    const summaryTable = data.dashboard.summary_table;
-                    if (summaryTable && summaryTable.total) {
-                        document.getElementById('dataStats').innerHTML = `
-                            <p><strong>총 CPO:</strong> ${summaryTable.total.cpos.toLocaleString()}개</p>
-                            <p><strong>총 충전소:</strong> ${summaryTable.total.stations.toLocaleString()}개</p>
-                            <p><strong>총 충전기:</strong> ${summaryTable.total.total_chargers.toLocaleString()}기</p>
-                        `;
+                    // 데이터 정보 표시 (요소가 있을 때만)
+                    const statsGrid = document.getElementById('statsGrid');
+                    if (statsGrid) {
+                        statsGrid.style.display = 'grid';
                     }
                     
-                    document.getElementById('snapshotInfo').innerHTML = `
-                        <p><strong>분석 기간:</strong> ${startMonth} ~ ${endMonth}</p>
-                        <p><strong>포함 월:</strong> ${selectedMonths.length}개월</p>
-                    `;
+                    const summaryTable = data.dashboard.summary_table;
+                    if (summaryTable && summaryTable.total) {
+                        const dataStats = document.getElementById('dataStats');
+                        if (dataStats) {
+                            dataStats.innerHTML = `
+                                <p><strong>총 CPO:</strong> ${summaryTable.total.cpos.toLocaleString()}개</p>
+                                <p><strong>총 충전소:</strong> ${summaryTable.total.stations.toLocaleString()}개</p>
+                                <p><strong>총 충전기:</strong> ${summaryTable.total.total_chargers.toLocaleString()}기</p>
+                            `;
+                        }
+                    }
+                    
+                    const snapshotInfo = document.getElementById('snapshotInfo');
+                    if (snapshotInfo) {
+                        snapshotInfo.innerHTML = `
+                            <p><strong>분석 기간:</strong> ${startMonth} ~ ${endMonth}</p>
+                            <p><strong>포함 월:</strong> ${selectedMonths.length}개월</p>
+                        `;
+                    }
                 } else {
                     alert('오류: ' + data.error);
                 }
@@ -1364,9 +1362,7 @@
                 periodStr = `${startMonth} ~ ${endMonth}`;
             }
             
-            let summaryHTML = `
-                <p><strong>분석 기간:</strong> ${periodStr}</p>
-            `;
+            let summaryHTML = '';
             
             // 요약 테이블 추가
             if (summaryTable && summaryTable.total) {
@@ -1393,15 +1389,16 @@
                 }
                 
                 summaryHTML += `
-                    <table class="summary-table">
+                    <p><strong>분석 기간:</strong> ${periodStr}</p>
+                    <table class="summary-table" style="table-layout: fixed; width: 100%;">
                         <thead>
                             <tr>
-                                <th></th>
-                                <th>충전사업자</th>
-                                <th>충전소</th>
-                                <th>완속충전기</th>
-                                <th>급속충전기</th>
-                                <th>전체충전기</th>
+                                <th style="width: 20%;"></th>
+                                <th style="width: 16%;">충전사업자</th>
+                                <th style="width: 16%;">충전소</th>
+                                <th style="width: 16%;">완속충전기</th>
+                                <th style="width: 16%;">급속충전기</th>
+                                <th style="width: 16%;">전체충전기</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1414,7 +1411,7 @@
                                 <td>${total.total_chargers.toLocaleString()}</td>
                             </tr>
                             ${monthlyChangeRow}
-                            <tr>
+                            <tr style="background: #fffbeb;">
                                 <td><strong>${changeLabel}</strong></td>
                                 <td>${formatChange(change.cpos)}</td>
                                 <td>${formatChange(change.stations)}</td>
@@ -1434,6 +1431,9 @@
             } else {
                 console.error('❌ dashboardSummary 요소를 찾을 수 없습니다');
             }
+            
+            // GS차지비 KPI 테이블 생성
+            createGSKpiTable(dashboard, startMonth, endMonth, targetMonth);
             
             // 차트 제목 업데이트
             document.getElementById('totalTrendTitle').textContent = `📈 전체 충전기 증감량 추이 (${periodStr})`;
@@ -1472,6 +1472,104 @@
                 return `<span class="change-positive"><span class="change-icon">▲</span>${value.toLocaleString()}</span>`;
             } else {
                 return `<span class="change-negative"><span class="change-icon">▼</span>${Math.abs(value).toLocaleString()}</span>`;
+            }
+        }
+        
+        function formatChangePercent(value) {
+            if (value === 0) {
+                return '0%p';
+            } else if (value > 0) {
+                return `<span class="change-positive"><span class="change-icon">▲</span>${value.toFixed(1)}%p</span>`;
+            } else {
+                return `<span class="change-negative"><span class="change-icon">▼</span>${Math.abs(value).toFixed(1)}%p</span>`;
+            }
+        }
+        
+        function createGSKpiTable(dashboard, startMonth, endMonth, targetMonth) {
+            const gsKpiElement = document.getElementById('gsKpiTable');
+            if (!gsKpiElement) {
+                console.error('❌ gsKpiTable 요소를 찾을 수 없습니다');
+                return;
+            }
+            
+            // 대시보드에서 GS차지비 KPI 데이터 가져오기
+            const kpi = dashboard.gs_kpi;
+            
+            if (kpi && kpi.current) {
+                console.log('✅ GS차지비 KPI 데이터:', kpi);
+                
+                // 전월 정보
+                const prevMonth = kpi.monthly_change && kpi.monthly_change.prev_month ? kpi.monthly_change.prev_month : '전월';
+                const currentMonth = endMonth || targetMonth;
+                
+                // 기간 표시 문자열
+                let periodStr = currentMonth;
+                if (startMonth && endMonth) {
+                    periodStr = `${startMonth} ~ ${endMonth}`;
+                }
+                
+                let kpiHTML = `
+                    <p><strong>분석 기간:</strong> ${periodStr}</p>
+                    <table class="summary-table" style="table-layout: fixed; width: 100%;">
+                        <thead>
+                            <tr>
+                                <th style="width: 20%;"></th>
+                                <th style="width: 16%;">시장점유율</th>
+                                <th style="width: 16%;">충전소</th>
+                                <th style="width: 16%;">완속충전기</th>
+                                <th style="width: 16%;">급속충전기</th>
+                                <th style="width: 16%;">전체충전기</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>GS차지비<br><small>(${currentMonth} 기준)</small></strong></td>
+                                <td>${kpi.current.market_share != null ? kpi.current.market_share.toFixed(1) + '%' : 'N/A'}</td>
+                                <td>${kpi.current.stations ? kpi.current.stations.toLocaleString() : 'N/A'}</td>
+                                <td>${kpi.current.slow_chargers ? kpi.current.slow_chargers.toLocaleString() : 'N/A'}</td>
+                                <td>${kpi.current.fast_chargers ? kpi.current.fast_chargers.toLocaleString() : 'N/A'}</td>
+                                <td>${kpi.current.total_chargers ? kpi.current.total_chargers.toLocaleString() : 'N/A'}</td>
+                            </tr>
+                `;
+                
+                // 전월 대비 증감량
+                if (kpi.monthly_change) {
+                    kpiHTML += `
+                            <tr>
+                                <td><strong>전월 대비 증감량<br><small>(${prevMonth} → ${currentMonth})</small></strong></td>
+                                <td>${formatChangePercent(kpi.monthly_change.market_share_change || 0)}</td>
+                                <td>${formatChange(kpi.monthly_change.stations || 0)}</td>
+                                <td>${formatChange(kpi.monthly_change.slow_chargers || 0)}</td>
+                                <td>${formatChange(kpi.monthly_change.fast_chargers || 0)}</td>
+                                <td>${formatChange(kpi.monthly_change.total_chargers || 0)}</td>
+                            </tr>
+                    `;
+                }
+                
+                // 기간 증감량
+                if (kpi.period_change) {
+                    kpiHTML += `
+                            <tr style="background: #fffbeb;">
+                                <td><strong>기간증감량<br><small>(${startMonth} ~ ${endMonth})</small></strong></td>
+                                <td>${formatChangePercent(kpi.period_change.market_share_change || 0)}</td>
+                                <td>${formatChange(kpi.period_change.stations || 0)}</td>
+                                <td>${formatChange(kpi.period_change.slow_chargers || 0)}</td>
+                                <td>${formatChange(kpi.period_change.fast_chargers || 0)}</td>
+                                <td>${formatChange(kpi.period_change.total_chargers || 0)}</td>
+                            </tr>
+                    `;
+                }
+                
+                kpiHTML += `
+                        </tbody>
+                    </table>
+                `;
+                
+                gsKpiElement.innerHTML = kpiHTML;
+                console.log('✅ GS차지비 KPI 테이블 렌더링 완료');
+            } else {
+                console.warn('⚠️ GS차지비 데이터 없음');
+                gsKpiElement.innerHTML = '<p style="color: #718096;">GS차지비 데이터를 찾을 수 없습니다.</p>';
             }
         }
         
@@ -1706,7 +1804,16 @@
                 options: {
                     responsive: true,
                     plugins: {
-                        legend: { position: 'top' },
+                        legend: { 
+                            position: 'top',
+                            labels: {
+                                boxWidth: 12,
+                                padding: 10,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
