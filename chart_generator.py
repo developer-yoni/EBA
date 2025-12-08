@@ -212,18 +212,69 @@ print(f"data:image/png;base64,{{img_base64}}")
         y_axis_label = data.get('y_axis_label', '값')
         
         # 값 표시 방식에 따른 autopct 설정
+        # 주의: 파이 차트의 autopct는 전체 합계 대비 비율을 계산함
+        # 이미 퍼센트 값인 경우 원래 값을 그대로 표시해야 함
         if y_axis_type == 'percentage':
-            # 점유율 모드: 퍼센트로 표시
-            autopct_code = "autopct='%1.1f%%'"
+            # 점유율 모드: 이미 퍼센트 값이므로 원래 값을 그대로 표시
+            # autopct 대신 수동으로 원래 값을 표시
+            autopct_code = "autopct=lambda pct: f'{values[int(round(pct/100.*len(values)))-1] if int(round(pct/100.*len(values))) > 0 else values[0]:.1f}%'"
             legend_format = "f'{l}: {v:.1f}%'"
+            use_original_values = True
         elif y_axis_type == 'calculated_rate':
-            # 증가률 모드: 퍼센트로 표시
-            autopct_code = "autopct='%1.1f%%'"
+            # 증가률 모드: 이미 퍼센트 값이므로 원래 값을 그대로 표시
+            autopct_code = "autopct=lambda pct: f'{values[int(round(pct/100.*len(values)))-1] if int(round(pct/100.*len(values))) > 0 else values[0]:.1f}%'"
             legend_format = "f'{l}: {v:.1f}%'"
+            use_original_values = True
         else:
             # 개수 모드: 실제 값과 비율 함께 표시
             autopct_code = "autopct=lambda pct: f'{int(pct/100.*sum(values)):,}'"
             legend_format = "f'{l}: {v:,}'"
+            use_original_values = False
+        
+        # 퍼센트 값인 경우 원래 값을 직접 표시하는 방식 사용
+        if y_axis_type in ['percentage', 'calculated_rate']:
+            return f'''
+import matplotlib.pyplot as plt
+import numpy as np
+import base64
+import io
+
+plt.rcParams['font.family'] = 'AppleGothic'
+plt.rcParams['axes.unicode_minus'] = False
+
+labels = {data.get('labels', [])}
+values = {data.get('values', [])}
+
+fig, ax = plt.subplots(figsize=(12, 8))
+colors = plt.cm.Set3(range(len(labels)))
+
+# 파이 차트 생성 (autopct 없이)
+wedges, texts = ax.pie(values, labels=None, colors=colors, startangle=90)
+
+# 각 조각에 원래 퍼센트 값 표시
+for i, (wedge, val) in enumerate(zip(wedges, values)):
+    angle = (wedge.theta2 + wedge.theta1) / 2
+    x = 0.7 * wedge.r * np.cos(np.radians(angle))
+    y = 0.7 * wedge.r * np.sin(np.radians(angle))
+    ax.text(x, y, f'{{val:.1f}}%', ha='center', va='center', fontsize=9, fontweight='bold')
+
+# 범례 추가 (라벨 + 값)
+legend_labels = [{legend_format} for l, v in zip(labels, values)]
+ax.legend(wedges, legend_labels, title="{y_axis_label}", loc="center left", 
+          bbox_to_anchor=(1, 0, 0.5, 1), fontsize=9)
+
+ax.set_title('{title}', fontsize=16, fontweight='bold', pad=20)
+
+plt.tight_layout()
+
+buffer = io.BytesIO()
+plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
+buffer.seek(0)
+img_base64 = base64.b64encode(buffer.getvalue()).decode()
+plt.close()
+
+print(f"data:image/png;base64,{{img_base64}}")
+'''
         
         return f'''
 import matplotlib.pyplot as plt

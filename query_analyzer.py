@@ -475,6 +475,15 @@ JSON만 출력하세요.
     def _calculate_y_values(self, top_df, col, y_axis_type, full_df, calculation_info=None):
         """y축 값 계산 (절대값, 점유율, 또는 증가률)"""
         
+        def to_python_type(val):
+            """numpy 타입을 Python 기본 타입으로 변환"""
+            import numpy as np
+            if isinstance(val, (np.integer, np.int64, np.int32)):
+                return int(val)
+            elif isinstance(val, (np.floating, np.float64, np.float32)):
+                return float(val)
+            return val
+        
         # 증가률 계산이 필요한 경우
         if y_axis_type == 'calculated_rate' and calculation_info:
             calc_type = calculation_info.get('type')
@@ -492,10 +501,10 @@ JSON만 출력하세요.
                     
                     if prev_val > 0:
                         rate = (change_val / prev_val) * 100
-                        values.append(round(rate, 2))
+                        values.append(round(float(rate), 2))
                     else:
                         # 이전 값이 0이면 증가률 계산 불가 (무한대 방지)
-                        values.append(0 if change_val == 0 else 100.0)
+                        values.append(0.0 if change_val == 0 else 100.0)
                 
                 print(f'      ├─ 증가률 계산: {change_col}/{base_col}-{change_col}*100', flush=True)
                 return values
@@ -504,13 +513,13 @@ JSON만 출력하세요.
         if y_axis_type == 'percentage':
             total = full_df[col].sum()
             if total > 0:
-                values = [(v / total * 100) for v in top_df[col].tolist()]
+                values = [(to_python_type(v) / float(total) * 100) for v in top_df[col].tolist()]
                 print(f'      ├─ 점유율 계산: 전체 합계 {total:,}, 점유율로 변환', flush=True)
                 return [round(v, 2) for v in values]
-            return top_df[col].tolist()
+            return [to_python_type(v) for v in top_df[col].tolist()]
         
-        # 절대값 그대로 반환
-        return top_df[col].tolist()
+        # 절대값 그대로 반환 (numpy 타입 변환)
+        return [to_python_type(v) for v in top_df[col].tolist()]
     
     def _validate_column_exists(self, col: str, df) -> tuple:
         """컬럼 존재 여부 확인 및 유사 컬럼 추천"""
@@ -537,6 +546,20 @@ JSON만 출력하세요.
     def extract_chart_data(self, df, intent: dict) -> dict:
         """DataFrame에서 차트 데이터 추출 (Text-to-SQL 방식)"""
         try:
+            import numpy as np
+            
+            # numpy 타입을 Python 기본 타입으로 변환하는 헬퍼 함수
+            def to_python_type(val):
+                if isinstance(val, (np.integer, np.int64, np.int32)):
+                    return int(val)
+                elif isinstance(val, (np.floating, np.float64, np.float32)):
+                    return float(val)
+                return val
+            
+            def convert_values_list(values):
+                """리스트 내 모든 값을 Python 기본 타입으로 변환"""
+                return [to_python_type(v) for v in values]
+            
             data_filter = intent.get('data_filter', {})
             chart_config = intent.get('chart_config', {})
             
@@ -634,19 +657,19 @@ JSON만 출력하세요.
                         return val
                 return col
             
-            # 시장점유율 값 변환 함수 (소수점 → 퍼센트)
+            # 시장점유율 값 변환 함수 (소수점 → 퍼센트) + numpy 타입 변환
             def convert_market_share(col_name, values):
-                """시장점유율 컬럼인 경우 소수점을 퍼센트로 변환"""
-                if col_name == '시장점유율':
-                    # 값이 1 미만이면 소수점 형태이므로 100을 곱해 퍼센트로 변환
-                    converted = []
-                    for v in values:
-                        if v is not None and v < 1:
-                            converted.append(round(v * 100, 2))
-                        else:
-                            converted.append(v)
-                    return converted
-                return values
+                """시장점유율 컬럼인 경우 소수점을 퍼센트로 변환하고 numpy 타입을 Python 타입으로 변환"""
+                converted = []
+                for v in values:
+                    # numpy 타입을 Python 타입으로 변환
+                    v = to_python_type(v)
+                    if col_name == '시장점유율' and v is not None and v < 1:
+                        # 값이 1 미만이면 소수점 형태이므로 100을 곱해 퍼센트로 변환
+                        converted.append(round(float(v) * 100, 2))
+                    else:
+                        converted.append(v)
+                return converted
             
             # 영어 컬럼명 → 한국어 라벨 변환 함수
             def to_korean_label(col_name):
@@ -1295,7 +1318,7 @@ JSON만 출력하세요.
                 grouped = grouped.sort_values('snapshot_month')
                 return {
                     'labels': grouped['snapshot_month'].tolist(),
-                    'values': grouped[col].tolist()
+                    'values': convert_values_list(grouped[col].tolist())
                 }
             
             return {'labels': [], 'values': [], 'error': '데이터 추출 실패'}
