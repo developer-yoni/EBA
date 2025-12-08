@@ -1052,35 +1052,47 @@
         
         // 서버에서 데이터가 이미 로드되어 있는지 확인
         async function checkDataStatus() {
+            console.log('🔍 checkDataStatus 시작');
             try {
+                console.log('📡 /api/dashboard GET 요청 중...');
                 const response = await fetch('/api/dashboard');
+                console.log('📥 응답 상태:', response.status, response.statusText);
+                
                 const data = await response.json();
+                console.log('📦 응답 데이터:', data);
                 
                 if (data.success) {
+                    console.log('✅ data.success = true');
                     dataLoaded = true;
                     
                     // RAG(Knowledge Base)에서 로드한 전체 데이터 기간 표시 (min ~ max)
                     let periodText = '전체';
+                    console.log('📅 availableMonths:', availableMonths);
                     if (availableMonths && availableMonths.length > 0) {
                         const sortedMonths = [...availableMonths].sort();
                         const minMonth = sortedMonths[0];
                         const maxMonth = sortedMonths[sortedMonths.length - 1];
                         periodText = `${minMonth} ~ ${maxMonth}`;
+                        console.log('📅 기간:', periodText);
                     }
                     
-                    document.getElementById('dataStatus').textContent = `✅ RAG 데이터 준비 완료 (${periodText})`;
+                    const statusText = `✅ RAG 데이터 준비 완료 (${periodText})`;
+                    console.log('📝 상태 텍스트 설정:', statusText);
+                    document.getElementById('dataStatus').textContent = statusText;
                     
                     // 버튼 활성화
                     document.getElementById('dashboardBtn').disabled = false;
-                    document.getElementById('reportBtn').disabled = false;
+                    const reportBtn = document.getElementById('reportBtn');
+                    if (reportBtn) reportBtn.disabled = false;
                     
                     console.log('✅ 데이터가 이미 로드되어 있습니다');
                 } else {
+                    console.log('❌ data.success = false');
                     document.getElementById('dataStatus').textContent = '⚠️ 데이터 로드 필요';
                     console.log('⚠️ 데이터를 로드해주세요');
                 }
             } catch (error) {
-                console.error('데이터 상태 확인 오류:', error);
+                console.error('❌ 데이터 상태 확인 오류:', error);
                 document.getElementById('dataStatus').textContent = '⚠️ 데이터 로드 필요';
             }
         }

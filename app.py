@@ -182,6 +182,22 @@ def filter_by_month():
 def get_dashboard():
     """대시보드 데이터 조회 (차트 + 요약)"""
     try:
+        # GET 요청인 경우 데이터 상태만 확인 (간단한 체크)
+        if request.method == 'GET':
+            if cache.get('full_data') is not None:
+                return jsonify({
+                    'success': True,
+                    'data_loaded': True,
+                    'message': '데이터가 로드되어 있습니다'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'data_loaded': False,
+                    'error': '데이터가 로드되지 않았습니다'
+                }), 400
+        
+        # POST 요청인 경우 실제 대시보드 데이터 반환
         if cache['full_data'] is None:
             return jsonify({
                 'success': False,
