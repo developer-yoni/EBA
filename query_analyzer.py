@@ -273,7 +273,9 @@ class QueryAnalyzer:
         "sort_column": "정렬 기준 컬럼",
         "display_column": "표시할 값 컬럼",
         "limit": 숫자,
-        "sort_order": "desc | asc"
+        "sort_order": "desc | asc",
+        "include_others": true | false,
+        "others_label": "기타 또는 사용자가 지정한 라벨 (예: others, 나머지 등)"
     }},
     "chart_config": {{
         "x_axis": "CPO명",
@@ -436,6 +438,74 @@ class QueryAnalyzer:
     "data_filter": {{
         "cpo_name": "전체",
         "display_column": "total_fast_chargers"
+    }}
+}}
+```
+
+### 예시 9: "시장점유율 top 5를 원형그래프로 그려줘, others로 나머지 표시" (기타 항목 + 영어 라벨)
+```json
+{{
+    "reasoning": {{
+        "step1_extraction": {{
+            "target": "CPO",
+            "metric": "시장점유율",
+            "conditions": "top 5, 나머지는 others로 표시",
+            "output_format": "chart"
+        }}
+    }},
+    "needs_chart": true,
+    "show_table": true,
+    "output_format": "chart",
+    "chart_type": "pie",
+    "chart_title": "시장점유율 Top 5 + Others",
+    "analysis_type": "ranking",
+    "data_filter": {{
+        "sort_column": "시장점유율",
+        "display_column": "시장점유율",
+        "limit": 5,
+        "sort_order": "desc",
+        "include_others": true,
+        "others_label": "others"
+    }},
+    "chart_config": {{
+        "x_axis": "CPO명",
+        "y_axis": "시장점유율",
+        "y_axis_type": "percentage",
+        "y_axis_label": "시장점유율 (%)"
+    }}
+}}
+```
+
+### 예시 10: "시장점유율 top 3를 파이차트로, 기타 포함" (기타 항목 + 한국어 기본값)
+```json
+{{
+    "reasoning": {{
+        "step1_extraction": {{
+            "target": "CPO",
+            "metric": "시장점유율",
+            "conditions": "top 3, 기타 포함",
+            "output_format": "chart"
+        }}
+    }},
+    "needs_chart": true,
+    "show_table": true,
+    "output_format": "chart",
+    "chart_type": "pie",
+    "chart_title": "시장점유율 Top 3 + 기타",
+    "analysis_type": "ranking",
+    "data_filter": {{
+        "sort_column": "시장점유율",
+        "display_column": "시장점유율",
+        "limit": 3,
+        "sort_order": "desc",
+        "include_others": true,
+        "others_label": "기타"
+    }},
+    "chart_config": {{
+        "x_axis": "CPO명",
+        "y_axis": "시장점유율",
+        "y_axis_type": "percentage",
+        "y_axis_label": "시장점유율 (%)"
     }}
 }}
 ```
@@ -1302,11 +1372,30 @@ JSON만 출력하세요.
                     # 계산 정보 전달
                     calc_info_for_values = calculation_info if needs_calculation else None
                     values = self._calculate_y_values(top_df, value_col, y_axis_type, latest_df, calc_info_for_values)
+                    labels = top_df['CPO명'].tolist()
                     
-                    print(f'      └─ 결과: {len(top_df)}개 CPO, 값 컬럼={value_col}, y축타입={y_axis_type}', flush=True)
+                    # "기타" 항목 추가 (include_others 옵션)
+                    include_others = data_filter.get('include_others', False)
+                    if include_others and y_axis_type == 'percentage':
+                        # Top N을 제외한 나머지 CPO의 점유율 합계
+                        top_cpos = set(labels)
+                        others_df = latest_df[~latest_df['CPO명'].isin(top_cpos)]
+                        if len(others_df) > 0 and value_col in others_df.columns:
+                            others_sum = others_df[value_col].sum()
+                            # 소수점 형태면 퍼센트로 변환
+                            if others_sum < 1:
+                                others_sum = others_sum * 100
+                            others_sum = round(float(others_sum), 2)
+                            # 사용자가 지정한 라벨 사용 (기본값: '기타')
+                            others_label = data_filter.get('others_label', '기타')
+                            labels.append(others_label)
+                            values.append(others_sum)
+                            print(f'      ├─ {others_label} 항목 추가: {len(others_df)}개 CPO, 합계 {others_sum}%', flush=True)
+                    
+                    print(f'      └─ 결과: {len(labels)}개 항목, 값 컬럼={value_col}, y축타입={y_axis_type}', flush=True)
                     
                     return {
-                        'labels': top_df['CPO명'].tolist(),
+                        'labels': labels,
                         'values': values,
                         'y_axis_type': y_axis_type,
                         'y_axis_label': y_axis_label
