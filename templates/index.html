@@ -811,6 +811,32 @@
             }
         }
         
+        // 리포트 유형 탭 전환 함수
+        function switchReportType(reportType, clickedTab) {
+            // 리포트 컨테이너 내의 탭 버튼들
+            const reportTabs = document.querySelectorAll('#reportContainer .tabs .tab, #kpiReportContent .tabs .tab');
+            reportTabs.forEach(tab => tab.classList.remove('active'));
+            
+            // 클릭된 탭 활성화
+            if (clickedTab) {
+                clickedTab.classList.add('active');
+            }
+            
+            // 모든 리포트 컨텐츠 숨기기
+            document.getElementById('kpiReportContent').classList.remove('active');
+            document.getElementById('cpoReportContent').classList.remove('active');
+            document.getElementById('trendReportContent').classList.remove('active');
+            
+            // 선택된 리포트 컨텐츠 표시
+            if (reportType === 'kpi') {
+                document.getElementById('kpiReportContent').classList.add('active');
+            } else if (reportType === 'cpo') {
+                document.getElementById('cpoReportContent').classList.add('active');
+            } else if (reportType === 'trend') {
+                document.getElementById('trendReportContent').classList.add('active');
+            }
+        }
+        
         function showStatus(message, type) {
             const status = document.getElementById('status');
             status.textContent = message;
@@ -1863,30 +1889,23 @@
                         progressBar.style.width = '0%';
                     }, 2000);
                     
-                    // 응답 시간 표시 HTML 생성
-                    let summaryTimeHtml = '';
-                    let cpoTimeHtml = '';
-                    let trendTimeHtml = '';
-                    let totalTimeHtml = '';
-                    
-                    if (data.report.response_times) {
-                        const times = data.report.response_times;
-                        const totalTime = (times.executive_summary || 0) + (times.cpo_analysis || 0) + (times.trend_forecast || 0);
-                        
-                        // 각 섹션별 응답 시간 표시
-                        summaryTimeHtml = `<div style="margin-bottom: 15px; padding: 8px 12px; background: #e6f7ff; border-left: 3px solid #1890ff; border-radius: 4px; font-size: 13px; color: #0050b3;"><strong>⏱️ 응답시간:</strong> ${formatTime(times.executive_summary || 0)}</div>`;
-                        cpoTimeHtml = `<div style="margin-bottom: 15px; padding: 8px 12px; background: #e6f7ff; border-left: 3px solid #1890ff; border-radius: 4px; font-size: 13px; color: #0050b3;"><strong>⏱️ 응답시간:</strong> ${formatTime(times.cpo_analysis || 0)}</div>`;
-                        trendTimeHtml = `<div style="margin-bottom: 15px; padding: 8px 12px; background: #e6f7ff; border-left: 3px solid #1890ff; border-radius: 4px; font-size: 13px; color: #0050b3;"><strong>⏱️ 응답시간:</strong> ${formatTime(times.trend_forecast || 0)}</div>`;
-                        
-                        // 총 소요 시간 표시 (커스텀 질의와 동일한 스타일)
-                        totalTimeHtml = `<strong style="color: #48bb78;">총 응답시간:</strong> ${formatTime(totalTime)}`;
-                    }
-                    
                     // 리포트 표시 (마크다운 렌더링)
                     document.getElementById('reportContainer').classList.remove('hidden');
-                    document.getElementById('executiveSummary').innerHTML = renderMarkdown(data.report.executive_summary || '생성 중...');
-                    document.getElementById('cpoAnalysis').innerHTML = renderMarkdown(data.report.cpo_analysis || '데이터 없음');
-                    document.getElementById('trendForecast').innerHTML = renderMarkdown(data.report.trend_forecast || '데이터 없음');
+                    
+                    // 리포트 유형에 따라 해당 탭에 내용 표시
+                    const reportContent = data.report.content || '';
+                    const renderedContent = renderMarkdown(reportContent);
+                    
+                    if (reportType === 'kpi') {
+                        document.getElementById('kpiReport').innerHTML = renderedContent;
+                        switchReportType('kpi', document.querySelector('.tabs button'));
+                    } else if (reportType === 'cpo') {
+                        document.getElementById('cpoReport').innerHTML = renderedContent;
+                        switchReportType('cpo', document.querySelector('.tabs button:nth-child(2)'));
+                    } else if (reportType === 'trend') {
+                        document.getElementById('trendReport').innerHTML = renderedContent;
+                        switchReportType('trend', document.querySelector('.tabs button:nth-child(3)'));
+                    }
                     
                     // 버튼 다시 활성화
                     kpiBtn.disabled = false;
