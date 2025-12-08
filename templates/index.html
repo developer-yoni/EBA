@@ -154,6 +154,9 @@
         
         .report-content {
             line-height: 1.8;
+            overflow: visible;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
         
         .report-content h2 {
@@ -416,6 +419,42 @@
                 orphans: 3;
                 widows: 3;
             }
+        }
+        
+        /* PDF 모드 스타일 - 표가 잘리지 않도록 */
+        .pdf-mode {
+            font-size: 11px !important;
+        }
+        
+        .pdf-mode table {
+            font-size: 10px !important;
+            width: 100% !important;
+        }
+        
+        .pdf-mode th,
+        .pdf-mode td {
+            padding: 6px 8px !important;
+            font-size: 10px !important;
+        }
+        
+        .pdf-mode h2 {
+            font-size: 16px !important;
+        }
+        
+        .pdf-mode h3 {
+            font-size: 14px !important;
+        }
+        
+        .pdf-mode h4 {
+            font-size: 12px !important;
+        }
+        
+        .pdf-mode li {
+            font-size: 11px !important;
+        }
+        
+        .pdf-mode .callout {
+            font-size: 10px !important;
         }
         
         .query-box {
@@ -2133,44 +2172,46 @@
             const targetMonth = document.getElementById('reportTargetMonth').value || 'report';
             const filename = `EV_Infra_${reportType}_Report_${targetMonth}_${dateStr}.pdf`;
             
-            // PDF 옵션 설정 (여러 페이지로 자동 분할)
+            // PDF 모드 클래스 추가 (CSS로 스타일 조정)
+            activeReport.classList.add('pdf-mode');
+            
+            // PDF 옵션 설정 - 가로 모드로 변경하여 표가 잘리지 않도록
             const opt = {
-                margin: [15, 15, 15, 15],  // 상하좌우 여백 (mm)
+                margin: [10, 10, 10, 10],
                 filename: filename,
                 image: { 
                     type: 'jpeg', 
                     quality: 0.95 
                 },
                 html2canvas: { 
-                    scale: 2,  // 고해상도로 렌더링
+                    scale: 2,
                     useCORS: true,
                     letterRendering: true,
                     scrollY: 0,
                     scrollX: 0,
-                    windowWidth: 1200,  // 렌더링 너비
                     logging: false
                 },
                 jsPDF: { 
                     unit: 'mm', 
                     format: 'a4', 
-                    orientation: 'portrait',
+                    orientation: 'landscape',  // 가로 모드로 변경
                     compress: true
                 },
                 pagebreak: { 
-                    mode: ['avoid-all', 'css', 'legacy'],  // CSS 페이지 브레이크 힌트 사용
-                    before: '.report-section h2',  // h2 제목 앞에서 페이지 나누기
-                    after: ['.callout', 'table'],  // 표와 콜아웃 뒤에서 페이지 나누기 고려
-                    avoid: ['tr', 'td']  // 테이블 행/셀은 나누지 않음
+                    mode: ['avoid-all', 'css', 'legacy'],
+                    avoid: ['tr', 'td', 'th', 'table', '.callout']
                 }
             };
             
             // PDF 생성 및 다운로드
             html2pdf().set(opt).from(activeReport).save().then(() => {
+                activeReport.classList.remove('pdf-mode');
                 downloadBtn.disabled = false;
                 downloadBtn.textContent = '📥 현재 리포트 PDF 다운로드';
             }).catch((error) => {
                 console.error('PDF 생성 오류:', error);
-                alert('PDF 생성 중 오류가 발생했습니다.');
+                activeReport.classList.remove('pdf-mode');
+                alert('PDF 생성 중 오류가 발생했습니다: ' + error.message);
                 downloadBtn.disabled = false;
                 downloadBtn.textContent = '📥 현재 리포트 PDF 다운로드';
             });
