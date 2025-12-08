@@ -45,15 +45,28 @@ class ChartGenerator:
         
         for i, s in enumerate(series):
             color = colors[i % len(colors)]
+            values = s['values']
+            
+            # 값 길이가 labels와 다르면 None으로 패딩
+            if len(values) != len(labels):
+                # 값이 부족하면 None으로 채움
+                padded_values = values + [None] * (len(labels) - len(values))
+                values = padded_values[:len(labels)]
+            
             series_code += f'''
-series_{i}_values = {s['values']}
-ax.plot(labels, series_{i}_values, marker='o', linewidth=2, markersize=6, 
-        color='{color}', label='{s['name']}')
+series_{i}_values = {values}
+# None 값을 제외하고 플롯
+valid_indices = [j for j, v in enumerate(series_{i}_values) if v is not None]
+valid_labels = [labels[j] for j in valid_indices]
+valid_values = [series_{i}_values[j] for j in valid_indices]
+if valid_values:
+    ax.plot(valid_labels, valid_values, marker='o', linewidth=2, markersize=6, 
+            color='{color}', label='{s['name']}')
 '''
             # 각 포인트에 값 표시 (시리즈별로 위/아래 오프셋 다르게)
             offset = 8 if i % 2 == 0 else -15
             annotation_code += f'''
-for j, v in enumerate(series_{i}_values):
+for j, v in zip(valid_indices, valid_values):
     ax.annotate(f'{{v:,.0f}}', (labels[j], v), textcoords="offset points",
                 xytext=(0, {offset}), ha='center', fontsize=7, color='{color}', alpha=0.8)
 '''

@@ -1899,7 +1899,7 @@
         let reportCache = {};
         let currentReportMonth = null;
         
-        // 모든 리포트 생성 (KPI + CPO + Trend)
+        // 모든 리포트 생성 (KPI + CPO + Trend) - 병렬 실행
         async function generateAllReports() {
             const targetMonth = document.getElementById('reportTargetMonth').value;
             
@@ -1916,11 +1916,8 @@
                 return;
             }
             
-            console.log('📊 전체 리포트 생성 시작');
+            console.log('🚀 병렬 리포트 생성 시작');
             console.log('📅 기준월:', targetMonth);
-            
-            // 전체 시작 시간 기록
-            const totalStartTime = Date.now();
             
             // 버튼 비활성화
             const generateBtn = document.getElementById('generateReportBtn');
@@ -1932,48 +1929,63 @@
             const progressText = document.getElementById('reportProgressText');
             
             progressContainer.classList.remove('hidden');
-            progressBar.style.width = '0%';
-            progressBar.textContent = '0%';
+            progressBar.style.width = '30%';
+            progressBar.textContent = '30%';
+            progressText.textContent = '🚀 3개 리포트 병렬 생성 중... (KPI + CPO + Trend)';
             
             try {
-                // 3가지 리포트 순차 생성
-                const reportTypes = ['kpi', 'cpo', 'trend'];
-                const reportNames = {
-                    'kpi': 'KPI Report',
-                    'cpo': 'CPO Report',
-                    'trend': 'Trend Report'
-                };
+                // 병렬 API 호출
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 300000); // 5분
                 
-                // 각 리포트별 소요 시간 저장
-                const reportTimes = {};
+                const response = await fetch('/api/generate-all-reports', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ targetMonth: targetMonth }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: response.statusText }));
+                    throw new Error(errorData.error || '리포트 생성 실패');
+                }
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || '리포트 생성 실패');
+                }
                 
                 // 캐시 초기화
                 if (!reportCache[targetMonth]) {
                     reportCache[targetMonth] = {};
                 }
                 
-                for (let i = 0; i < reportTypes.length; i++) {
-                    const reportType = reportTypes[i];
-                    const progress = Math.floor((i / reportTypes.length) * 100);
+                // 각 리포트 렌더링 및 캐시 저장
+                const reportTypes = ['kpi', 'cpo', 'trend'];
+                for (const reportType of reportTypes) {
+                    const reportContent = data.reports[reportType]?.content || '';
+                    const renderedContent = renderMarkdown(reportContent);
                     
-                    progressBar.style.width = progress + '%';
-                    progressBar.textContent = progress + '%';
-                    progressText.textContent = `🤖 ${reportNames[reportType]} 생성 중... (${i + 1}/3)`;
+                    reportCache[targetMonth][reportType] = renderedContent;
                     
-                    const startTime = Date.now();
-                    const success = await generateSingleReport(targetMonth, reportType);
-                    const endTime = Date.now();
-                    
-                    reportTimes[reportType] = (endTime - startTime) / 1000; // 초 단위
-                    
-                    if (!success) {
-                        throw new Error(`${reportNames[reportType]} 생성 실패`);
+                    if (reportType === 'kpi') {
+                        document.getElementById('kpiReport').innerHTML = renderedContent;
+                    } else if (reportType === 'cpo') {
+                        document.getElementById('cpoReport').innerHTML = renderedContent;
+                    } else if (reportType === 'trend') {
+                        document.getElementById('trendReport').innerHTML = renderedContent;
                     }
                 }
                 
-                // 전체 종료 시간 계산
-                const totalEndTime = Date.now();
-                const totalTime = (totalEndTime - totalStartTime) / 1000; // 초 단위
+                const reportTimes = data.report_times || {};
+                const totalTime = data.total_time || 0;
+                
+                // 순차 실행 대비 예상 시간 계산
+                const sequentialTime = (reportTimes.kpi || 0) + (reportTimes.cpo || 0) + (reportTimes.trend || 0);
+                const speedup = sequentialTime > 0 ? (sequentialTime / totalTime).toFixed(1) : '-';
                 
                 // 완료
                 progressBar.style.width = '100%';
@@ -1989,11 +2001,12 @@
                 totalTimeDiv.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <strong>📊 리포트 생성 완료</strong>
+                            <strong>🚀 병렬 리포트 생성 완료</strong>
                             <div style="margin-top: 8px; font-size: 13px; color: #718096;">
-                                <span style="margin-right: 15px;">• KPI Report: ${formatTime(reportTimes.kpi)}</span>
-                                <span style="margin-right: 15px;">• CPO Report: ${formatTime(reportTimes.cpo)}</span>
-                                <span>• Trend Report: ${formatTime(reportTimes.trend)}</span>
+                                <span style="margin-right: 15px;">• KPI: ${formatTime(reportTimes.kpi)}</span>
+                                <span style="margin-right: 15px;">• CPO: ${formatTime(reportTimes.cpo)}</span>
+                                <span style="margin-right: 15px;">• Trend: ${formatTime(reportTimes.trend)}</span>
+                                <span style="color: #48bb78;">• 순차 대비 ${speedup}배 빠름</span>
                             </div>
                         </div>
                         <div style="text-align: right;">
@@ -2017,6 +2030,7 @@
                 
             } catch (error) {
                 progressContainer.classList.add('hidden');
+                console.error('❌ 병렬 리포트 생성 오류:', error);
                 alert('오류: ' + error.message);
                 generateBtn.disabled = false;
             }

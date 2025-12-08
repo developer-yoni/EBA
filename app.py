@@ -307,6 +307,161 @@ def get_dashboard():
             'error': str(e)
         }), 500
 
+@app.route('/api/generate-all-reports', methods=['POST'])
+def generate_all_reports():
+    """AI 리포트 3종 병렬 생성 (KPI + CPO + Trend)"""
+    import time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    try:
+        data = request.json
+        target_month = data.get('targetMonth')
+        
+        if not target_month:
+            return jsonify({
+                'success': False,
+                'error': '기준월을 선택해주세요'
+            }), 400
+        
+        if cache['full_data'] is None:
+            return jsonify({
+                'success': False,
+                'error': '먼저 데이터를 로드해주세요'
+            }), 400
+        
+        print(f'\n🚀 병렬 리포트 생성 시작 - 기준월: {target_month}', flush=True)
+        total_start = time.time()
+        
+        # 실제 데이터에서 사용 가능한 모든 월 가져오기
+        all_months = sorted(cache['full_data']['snapshot_month'].unique().tolist())
+        
+        # 기준월 기준 최근 12개월 계산
+        from datetime import datetime
+        target_date = datetime.strptime(target_month, '%Y-%m')
+        
+        months_back = 11
+        start_year = target_date.year
+        start_month_num = target_date.month - months_back
+        
+        while start_month_num <= 0:
+            start_month_num += 12
+            start_year -= 1
+        
+        start_month = f'{start_year}-{start_month_num:02d}'
+        available_months = [m for m in all_months if start_month <= m <= target_month]
+        
+        if len(available_months) < 12:
+            available_months = [m for m in all_months if m <= target_month]
+        
+        print(f'📅 분석 범위: {available_months[0]} ~ {available_months[-1]} ({len(available_months)}개월)', flush=True)
+        
+        # 기준월 데이터
+        target_data = cache['full_data'][cache['full_data']['snapshot_month'] == target_month]
+        range_data = cache['full_data'][cache['full_data']['snapshot_month'].isin(available_months)]
+        
+        if len(target_data) == 0:
+            return jsonify({
+                'success': False,
+                'error': f'{target_month} 데이터가 없습니다'
+            }), 404
+        
+        # 분석 실행
+        from data_analyzer import ChargingDataAnalyzer
+        target_analyzer = ChargingDataAnalyzer(target_data)
+        range_analyzer = ChargingDataAnalyzer(range_data)
+        
+        target_insights = target_analyzer.generate_insights()
+        range_insights = range_analyzer.generate_insights()
+        
+        # 병렬 실행을 위한 함수 정의 (각 스레드에서 별도 generator 인스턴스 생성)
+        def generate_kpi():
+            # 각 스레드에서 별도의 boto3 클라이언트를 가진 generator 생성
+            local_generator = AIReportGenerator()
+            start = time.time()
+            content = local_generator.generate_kpi_snapshot_report(
+                target_month=target_month,
+                target_insights=target_insights,
+                target_data=target_data,
+                available_months=available_months
+            )
+            elapsed = time.time() - start
+            print(f'✅ KPI Report 완료 (⏱️ {elapsed:.2f}초)', flush=True)
+            return ('kpi', content, elapsed)
+        
+        def generate_cpo():
+            # 각 스레드에서 별도의 boto3 클라이언트를 가진 generator 생성
+            local_generator = AIReportGenerator()
+            start = time.time()
+            content = local_generator.generate_cpo_ranking_report(
+                target_month=target_month,
+                target_insights=target_insights,
+                target_data=target_data,
+                available_months=available_months
+            )
+            elapsed = time.time() - start
+            print(f'✅ CPO Report 완료 (⏱️ {elapsed:.2f}초)', flush=True)
+            return ('cpo', content, elapsed)
+        
+        def generate_trend():
+            # 각 스레드에서 별도의 boto3 클라이언트를 가진 generator 생성
+            local_generator = AIReportGenerator()
+            start = time.time()
+            content = local_generator.generate_monthly_trend_report(
+                target_month=target_month,
+                range_insights=range_insights,
+                range_data=range_data,
+                available_months=available_months
+            )
+            elapsed = time.time() - start
+            print(f'✅ Trend Report 완료 (⏱️ {elapsed:.2f}초)', flush=True)
+            return ('trend', content, elapsed)
+        
+        # ThreadPoolExecutor로 병렬 실행
+        reports = {}
+        report_times = {}
+        
+        print(f'🔄 3개 리포트 병렬 생성 시작...', flush=True)
+        
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [
+                executor.submit(generate_kpi),
+                executor.submit(generate_cpo),
+                executor.submit(generate_trend)
+            ]
+            
+            for future in as_completed(futures):
+                report_type, content, elapsed = future.result()
+                reports[report_type] = content
+                report_times[report_type] = round(elapsed, 2)
+        
+        total_elapsed = time.time() - total_start
+        
+        print(f'\n✅ 병렬 리포트 생성 완료!', flush=True)
+        print(f'   - KPI: {report_times.get("kpi", 0)}초', flush=True)
+        print(f'   - CPO: {report_times.get("cpo", 0)}초', flush=True)
+        print(f'   - Trend: {report_times.get("trend", 0)}초', flush=True)
+        print(f'   - 총 소요: {total_elapsed:.2f}초 (순차 실행 대비 약 {sum(report_times.values()) / total_elapsed:.1f}배 빠름)', flush=True)
+        
+        return jsonify({
+            'success': True,
+            'reports': {
+                'kpi': {'type': 'kpi', 'content': reports.get('kpi', '')},
+                'cpo': {'type': 'cpo', 'content': reports.get('cpo', '')},
+                'trend': {'type': 'trend', 'content': reports.get('trend', '')}
+            },
+            'report_times': report_times,
+            'total_time': round(total_elapsed, 2)
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/generate-report', methods=['GET', 'POST'])
 def generate_report():
     """AI 리포트 생성 (3가지 유형)"""

@@ -1198,13 +1198,26 @@ JSON만 출력하세요.
         # 다중 시리즈 여부 확인
         is_multi_series = chart_data.get('multi_series', False)
         
+        def format_value(val):
+            """값을 안전하게 포맷팅 (숫자면 천단위 구분, 문자열이면 그대로)"""
+            if isinstance(val, (int, float)):
+                return f"{val:,}"
+            return str(val)
+        
         if is_multi_series:
             # 다중 시리즈 데이터 요약
             series_info = []
             for s in chart_data.get('series', []):
                 values = s.get('values', [])
                 if values:
-                    series_info.append(f"- {s['name']}: 최소 {min(values):,}, 최대 {max(values):,}")
+                    # 숫자 값만 필터링하여 min/max 계산
+                    numeric_values = [v for v in values if isinstance(v, (int, float))]
+                    if numeric_values:
+                        min_val = min(numeric_values)
+                        max_val = max(numeric_values)
+                        series_info.append(f"- {s['name']}: 최소 {format_value(min_val)}, 최대 {format_value(max_val)}")
+                    else:
+                        series_info.append(f"- {s['name']}: {len(values)}개 항목")
             
             data_summary = f"""
 - 조회 기간: {chart_data.get('labels', ['N/A'])[0]} ~ {chart_data.get('labels', ['N/A'])[-1]}
@@ -1221,7 +1234,7 @@ JSON만 출력하세요.
             labels = chart_data.get('labels', [])
             series_list = chart_data.get('series', [])
             for i, label in enumerate(labels):
-                row_values = [label] + [f"{s['values'][i]:,}" for s in series_list]
+                row_values = [label] + [format_value(s['values'][i]) if i < len(s['values']) else 'N/A' for s in series_list]
                 rows.append('| ' + ' | '.join(row_values) + ' |')
             
             detail_table = f"{table_header}\n{table_sep}\n" + '\n'.join(rows)
