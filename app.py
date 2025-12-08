@@ -307,10 +307,24 @@ def get_dashboard():
             'error': str(e)
         }), 500
 
+# 리포트 생성 진행 상태 저장 (세션별)
+report_progress = {}
+
+@app.route('/api/report-progress/<session_id>')
+def get_report_progress(session_id):
+    """리포트 생성 진행 상태 조회"""
+    progress = report_progress.get(session_id, {
+        'completed': [],
+        'total': 3,
+        'status': 'pending'
+    })
+    return jsonify(progress)
+
 @app.route('/api/generate-all-reports', methods=['POST'])
 def generate_all_reports():
-    """AI 리포트 3종 병렬 생성 (KPI + CPO + Trend)"""
+    """AI 리포트 3종 병렬 생성 (KPI + CPO + Trend) - 실시간 진행률 지원"""
     import time
+    import uuid
     from concurrent.futures import ThreadPoolExecutor, as_completed
     
     try:
@@ -329,7 +343,16 @@ def generate_all_reports():
                 'error': '먼저 데이터를 로드해주세요'
             }), 400
         
-        print(f'\n🚀 병렬 리포트 생성 시작 - 기준월: {target_month}', flush=True)
+        # 세션 ID 생성 (진행률 추적용)
+        session_id = str(uuid.uuid4())
+        report_progress[session_id] = {
+            'completed': [],
+            'total': 3,
+            'status': 'running',
+            'report_times': {}
+        }
+        
+        print(f'\n🚀 병렬 리포트 생성 시작 - 기준월: {target_month} (세션: {session_id[:8]})', flush=True)
         total_start = time.time()
         
         # 실제 데이터에서 사용 가능한 모든 월 가져오기
@@ -375,7 +398,6 @@ def generate_all_reports():
         
         # 병렬 실행을 위한 함수 정의 (각 스레드에서 별도 generator 인스턴스 생성)
         def generate_kpi():
-            # 각 스레드에서 별도의 boto3 클라이언트를 가진 generator 생성
             local_generator = AIReportGenerator()
             start = time.time()
             content = local_generator.generate_kpi_snapshot_report(
@@ -385,11 +407,13 @@ def generate_all_reports():
                 available_months=available_months
             )
             elapsed = time.time() - start
-            print(f'✅ KPI Report 완료 (⏱️ {elapsed:.2f}초)', flush=True)
+            # 진행 상태 업데이트
+            report_progress[session_id]['completed'].append('kpi')
+            report_progress[session_id]['report_times']['kpi'] = round(elapsed, 2)
+            print(f'✅ KPI Report 완료 (⏱️ {elapsed:.2f}초) - 진행률: {len(report_progress[session_id]["completed"])}/3', flush=True)
             return ('kpi', content, elapsed)
         
         def generate_cpo():
-            # 각 스레드에서 별도의 boto3 클라이언트를 가진 generator 생성
             local_generator = AIReportGenerator()
             start = time.time()
             content = local_generator.generate_cpo_ranking_report(
@@ -399,11 +423,13 @@ def generate_all_reports():
                 available_months=available_months
             )
             elapsed = time.time() - start
-            print(f'✅ CPO Report 완료 (⏱️ {elapsed:.2f}초)', flush=True)
+            # 진행 상태 업데이트
+            report_progress[session_id]['completed'].append('cpo')
+            report_progress[session_id]['report_times']['cpo'] = round(elapsed, 2)
+            print(f'✅ CPO Report 완료 (⏱️ {elapsed:.2f}초) - 진행률: {len(report_progress[session_id]["completed"])}/3', flush=True)
             return ('cpo', content, elapsed)
         
         def generate_trend():
-            # 각 스레드에서 별도의 boto3 클라이언트를 가진 generator 생성
             local_generator = AIReportGenerator()
             start = time.time()
             content = local_generator.generate_monthly_trend_report(
@@ -413,7 +439,10 @@ def generate_all_reports():
                 available_months=available_months
             )
             elapsed = time.time() - start
-            print(f'✅ Trend Report 완료 (⏱️ {elapsed:.2f}초)', flush=True)
+            # 진행 상태 업데이트
+            report_progress[session_id]['completed'].append('trend')
+            report_progress[session_id]['report_times']['trend'] = round(elapsed, 2)
+            print(f'✅ Trend Report 완료 (⏱️ {elapsed:.2f}초) - 진행률: {len(report_progress[session_id]["completed"])}/3', flush=True)
             return ('trend', content, elapsed)
         
         # ThreadPoolExecutor로 병렬 실행
@@ -436,6 +465,15 @@ def generate_all_reports():
         
         total_elapsed = time.time() - total_start
         
+        # 진행 상태 완료로 업데이트
+        report_progress[session_id]['status'] = 'completed'
+        
+        # 오래된 세션 정리 (메모리 관리)
+        if len(report_progress) > 100:
+            oldest_keys = list(report_progress.keys())[:50]
+            for key in oldest_keys:
+                del report_progress[key]
+        
         print(f'\n✅ 병렬 리포트 생성 완료!', flush=True)
         print(f'   - KPI: {report_times.get("kpi", 0)}초', flush=True)
         print(f'   - CPO: {report_times.get("cpo", 0)}초', flush=True)
@@ -444,6 +482,7 @@ def generate_all_reports():
         
         return jsonify({
             'success': True,
+            'session_id': session_id,
             'reports': {
                 'kpi': {'type': 'kpi', 'content': reports.get('kpi', '')},
                 'cpo': {'type': 'cpo', 'content': reports.get('cpo', '')},
@@ -460,6 +499,153 @@ def generate_all_reports():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.route('/api/generate-all-reports-stream', methods=['POST'])
+def generate_all_reports_stream():
+    """AI 리포트 3종 병렬 생성 - SSE 스트리밍 방식"""
+    from flask import Response, stream_with_context
+    import time
+    import uuid
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import queue
+    import threading
+    
+    data = request.json
+    target_month = data.get('targetMonth')
+    
+    if not target_month:
+        return jsonify({'success': False, 'error': '기준월을 선택해주세요'}), 400
+    
+    if cache['full_data'] is None:
+        return jsonify({'success': False, 'error': '먼저 데이터를 로드해주세요'}), 400
+    
+    def generate():
+        import json
+        
+        try:
+            total_start = time.time()
+            
+            # 초기 상태 전송
+            yield f"data: {json.dumps({'type': 'start', 'message': '리포트 생성 시작', 'progress': 0})}\n\n"
+            
+            # 데이터 준비
+            all_months = sorted(cache['full_data']['snapshot_month'].unique().tolist())
+            from datetime import datetime
+            target_date = datetime.strptime(target_month, '%Y-%m')
+            
+            months_back = 11
+            start_year = target_date.year
+            start_month_num = target_date.month - months_back
+            
+            while start_month_num <= 0:
+                start_month_num += 12
+                start_year -= 1
+            
+            start_month_str = f'{start_year}-{start_month_num:02d}'
+            available_months = [m for m in all_months if start_month_str <= m <= target_month]
+            
+            if len(available_months) < 12:
+                available_months = [m for m in all_months if m <= target_month]
+            
+            target_data = cache['full_data'][cache['full_data']['snapshot_month'] == target_month]
+            range_data = cache['full_data'][cache['full_data']['snapshot_month'].isin(available_months)]
+            
+            from data_analyzer import ChargingDataAnalyzer
+            target_analyzer = ChargingDataAnalyzer(target_data)
+            range_analyzer = ChargingDataAnalyzer(range_data)
+            
+            target_insights = target_analyzer.generate_insights()
+            range_insights = range_analyzer.generate_insights()
+            
+            # 결과 저장용 큐
+            result_queue = queue.Queue()
+            reports = {}
+            report_times = {}
+            completed_count = 0
+            
+            def generate_kpi():
+                local_generator = AIReportGenerator()
+                start = time.time()
+                content = local_generator.generate_kpi_snapshot_report(
+                    target_month=target_month,
+                    target_insights=target_insights,
+                    target_data=target_data,
+                    available_months=available_months
+                )
+                elapsed = time.time() - start
+                result_queue.put(('kpi', content, elapsed))
+            
+            def generate_cpo():
+                local_generator = AIReportGenerator()
+                start = time.time()
+                content = local_generator.generate_cpo_ranking_report(
+                    target_month=target_month,
+                    target_insights=target_insights,
+                    target_data=target_data,
+                    available_months=available_months
+                )
+                elapsed = time.time() - start
+                result_queue.put(('cpo', content, elapsed))
+            
+            def generate_trend():
+                local_generator = AIReportGenerator()
+                start = time.time()
+                content = local_generator.generate_monthly_trend_report(
+                    target_month=target_month,
+                    range_insights=range_insights,
+                    range_data=range_data,
+                    available_months=available_months
+                )
+                elapsed = time.time() - start
+                result_queue.put(('trend', content, elapsed))
+            
+            # 스레드 시작
+            threads = [
+                threading.Thread(target=generate_kpi),
+                threading.Thread(target=generate_cpo),
+                threading.Thread(target=generate_trend)
+            ]
+            
+            for t in threads:
+                t.start()
+            
+            # 결과 수집 및 진행률 전송
+            while completed_count < 3:
+                try:
+                    report_type, content, elapsed = result_queue.get(timeout=1)
+                    reports[report_type] = content
+                    report_times[report_type] = round(elapsed, 2)
+                    completed_count += 1
+                    progress = int((completed_count / 3) * 100)
+                    
+                    yield f"data: {json.dumps({'type': 'progress', 'report': report_type, 'time': round(elapsed, 2), 'progress': progress, 'completed': completed_count})}\n\n"
+                except queue.Empty:
+                    continue
+            
+            # 모든 스레드 종료 대기
+            for t in threads:
+                t.join()
+            
+            total_elapsed = time.time() - total_start
+            
+            # 최종 결과 전송
+            yield f"data: {json.dumps({'type': 'complete', 'reports': {'kpi': {'content': reports.get('kpi', '')}, 'cpo': {'content': reports.get('cpo', '')}, 'trend': {'content': reports.get('trend', '')}}, 'report_times': report_times, 'total_time': round(total_elapsed, 2), 'progress': 100})}\n\n"
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
 
 
 @app.route('/api/generate-report', methods=['GET', 'POST'])
@@ -637,7 +823,8 @@ def custom_query():
                 'query': query,
                 'answer': result.get('answer'),
                 'has_chart': result.get('has_chart', False),
-                'bedrock_time': result.get('bedrock_time', 0)
+                'bedrock_time': result.get('bedrock_time', 0),
+                'total_time': result.get('total_time', 0)
             }
             
             # 차트 이미지가 있으면 추가

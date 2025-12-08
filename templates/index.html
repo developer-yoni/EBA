@@ -1899,7 +1899,14 @@
         let reportCache = {};
         let currentReportMonth = null;
         
-        // 모든 리포트 생성 (KPI + CPO + Trend) - 병렬 실행
+        // 리포트 타입별 이름 매핑
+        const reportTypeNames = {
+            'kpi': 'KPI Report',
+            'cpo': 'CPO Report', 
+            'trend': 'Trend Report'
+        };
+        
+        // 모든 리포트 생성 (KPI + CPO + Trend) - SSE 스트리밍 방식
         async function generateAllReports() {
             const targetMonth = document.getElementById('reportTargetMonth').value;
             
@@ -1916,7 +1923,7 @@
                 return;
             }
             
-            console.log('🚀 병렬 리포트 생성 시작');
+            console.log('🚀 병렬 리포트 생성 시작 (SSE 스트리밍)');
             console.log('📅 기준월:', targetMonth);
             
             // 버튼 비활성화
@@ -1929,33 +1936,87 @@
             const progressText = document.getElementById('reportProgressText');
             
             progressContainer.classList.remove('hidden');
-            progressBar.style.width = '30%';
-            progressBar.textContent = '30%';
-            progressText.textContent = '🚀 3개 리포트 병렬 생성 중... (KPI + CPO + Trend)';
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+            progressText.textContent = '🚀 3개 리포트 병렬 생성 시작... (KPI + CPO + Trend)';
+            
+            // 완료된 리포트 추적
+            const completedReports = [];
+            const reportTimes = {};
             
             try {
-                // 병렬 API 호출
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 300000); // 5분
-                
-                const response = await fetch('/api/generate-all-reports', {
+                // SSE 스트리밍 API 호출
+                const response = await fetch('/api/generate-all-reports-stream', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ targetMonth: targetMonth }),
-                    signal: controller.signal
+                    body: JSON.stringify({ targetMonth: targetMonth })
                 });
                 
-                clearTimeout(timeoutId);
-                
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ error: response.statusText }));
-                    throw new Error(errorData.error || '리포트 생성 실패');
+                    throw new Error('리포트 생성 실패');
                 }
                 
-                const data = await response.json();
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let finalData = null;
                 
-                if (!data.success) {
-                    throw new Error(data.error || '리포트 생성 실패');
+                while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    
+                    // SSE 메시지 파싱
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (data.type === 'start') {
+                                    console.log('📡 스트리밍 시작:', data.message);
+                                    progressText.textContent = '🔄 Bedrock 모델 호출 중...';
+                                }
+                                else if (data.type === 'progress') {
+                                    // 각 리포트 완료 시 진행률 업데이트
+                                    completedReports.push(data.report);
+                                    reportTimes[data.report] = data.time;
+                                    
+                                    const progress = data.progress;
+                                    progressBar.style.width = `${progress}%`;
+                                    progressBar.textContent = `${progress}%`;
+                                    
+                                    const completedNames = completedReports.map(r => reportTypeNames[r]).join(', ');
+                                    const remaining = 3 - data.completed;
+                                    
+                                    if (remaining > 0) {
+                                        progressText.textContent = `✅ ${completedNames} 완료 | 🔄 ${remaining}개 리포트 생성 중...`;
+                                    } else {
+                                        progressText.textContent = `✅ 모든 리포트 완료! (${completedNames})`;
+                                    }
+                                    
+                                    console.log(`✅ ${data.report} 완료 (${data.time}초) - 진행률: ${progress}%`);
+                                }
+                                else if (data.type === 'complete') {
+                                    finalData = data;
+                                    console.log('🎉 모든 리포트 생성 완료');
+                                }
+                                else if (data.type === 'error') {
+                                    throw new Error(data.error);
+                                }
+                            } catch (parseError) {
+                                console.warn('SSE 파싱 오류:', parseError);
+                            }
+                        }
+                    }
+                }
+                
+                if (!finalData) {
+                    throw new Error('리포트 데이터를 받지 못했습니다');
                 }
                 
                 // 캐시 초기화
@@ -1966,7 +2027,7 @@
                 // 각 리포트 렌더링 및 캐시 저장
                 const reportTypes = ['kpi', 'cpo', 'trend'];
                 for (const reportType of reportTypes) {
-                    const reportContent = data.reports[reportType]?.content || '';
+                    const reportContent = finalData.reports[reportType]?.content || '';
                     const renderedContent = renderMarkdown(reportContent);
                     
                     reportCache[targetMonth][reportType] = renderedContent;
@@ -1980,11 +2041,11 @@
                     }
                 }
                 
-                const reportTimes = data.report_times || {};
-                const totalTime = data.total_time || 0;
+                const finalReportTimes = finalData.report_times || reportTimes;
+                const totalTime = finalData.total_time || 0;
                 
                 // 순차 실행 대비 예상 시간 계산
-                const sequentialTime = (reportTimes.kpi || 0) + (reportTimes.cpo || 0) + (reportTimes.trend || 0);
+                const sequentialTime = (finalReportTimes.kpi || 0) + (finalReportTimes.cpo || 0) + (finalReportTimes.trend || 0);
                 const speedup = sequentialTime > 0 ? (sequentialTime / totalTime).toFixed(1) : '-';
                 
                 // 완료
@@ -2003,9 +2064,9 @@
                         <div>
                             <strong>🚀 병렬 리포트 생성 완료</strong>
                             <div style="margin-top: 8px; font-size: 13px; color: #718096;">
-                                <span style="margin-right: 15px;">• KPI: ${formatTime(reportTimes.kpi)}</span>
-                                <span style="margin-right: 15px;">• CPO: ${formatTime(reportTimes.cpo)}</span>
-                                <span style="margin-right: 15px;">• Trend: ${formatTime(reportTimes.trend)}</span>
+                                <span style="margin-right: 15px;">• KPI: ${formatTime(finalReportTimes.kpi)}</span>
+                                <span style="margin-right: 15px;">• CPO: ${formatTime(finalReportTimes.cpo)}</span>
+                                <span style="margin-right: 15px;">• Trend: ${formatTime(finalReportTimes.trend)}</span>
                                 <span style="color: #48bb78;">• 순차 대비 ${speedup}배 빠름</span>
                             </div>
                         </div>
@@ -2275,16 +2336,17 @@
                 
                 const data = await response.json();
                 console.log('📊 API 응답 데이터:', data);
-                console.log('⏱️ bedrock_time:', data.bedrock_time);
+                console.log('⏱️ total_time:', data.total_time, 'bedrock_time:', data.bedrock_time);
                 
                 if (data.success) {
                     // 답변을 마크다운으로 렌더링
                     const renderedAnswer = renderMarkdown(data.answer);
                     
-                    // 응답 시간 텍스트 생성 (질문과 동일한 스타일, 녹색)
+                    // 응답 시간 텍스트 생성 (전체 처리 시간 사용, 녹색)
                     let responseTimeHtml = '';
-                    if (data.bedrock_time !== undefined && data.bedrock_time !== null) {
-                        responseTimeHtml = `<strong style="color: #48bb78;">응답시간:</strong> ${formatTime(data.bedrock_time)}<br><br>`;
+                    const displayTime = data.total_time !== undefined && data.total_time !== null ? data.total_time : data.bedrock_time;
+                    if (displayTime !== undefined && displayTime !== null) {
+                        responseTimeHtml = `<strong style="color: #48bb78;">응답시간:</strong> ${formatTime(displayTime)}<br><br>`;
                     }
                     
                     // 차트가 있는 경우

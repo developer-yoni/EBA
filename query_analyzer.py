@@ -277,6 +277,21 @@ class QueryAnalyzer:
         "include_others": true | false,
         "others_label": "기타 또는 사용자가 지정한 라벨 (예: others, 나머지 등)"
     }},
+
+## 🚨 매우 중요: include_others 규칙 (기타 항목 포함 여부)
+
+### include_others: true로 설정하는 경우 (명시적 요청 필수!)
+다음 키워드가 **명시적으로** 포함된 경우에만 true로 설정합니다:
+- "기타", "나머지", "others", "그 외", "외 나머지", "포함해서", "합쳐서"
+- 예: "top 5와 기타", "나머지는 others로", "기타 포함", "나머지 합쳐서"
+
+### include_others: false로 설정하는 경우 (기본값!)
+- 위 키워드가 **전혀 없는** 경우 → 기본값 false
+- "top 5를 원형그래프로" → include_others: false (기타 언급 없음)
+- "시장점유율 상위 3개" → include_others: false (기타 언급 없음)
+
+⚠️ 주의: 원형그래프(파이차트)라고 해서 자동으로 기타를 포함하지 않습니다!
+사용자가 명시적으로 "기타", "나머지" 등을 요청한 경우에만 include_others: true로 설정하세요.
     "chart_config": {{
         "x_axis": "CPO명",
         "y_axis": "표시할 데이터명",
@@ -442,7 +457,40 @@ class QueryAnalyzer:
 }}
 ```
 
-### 예시 9: "시장점유율 top 5를 원형그래프로 그려줘, others로 나머지 표시" (기타 항목 + 영어 라벨)
+### 예시 9: "시장점유율 top 5를 원형그래프로 그려줘" (기타 항목 없음 - 기본값!)
+```json
+{{
+    "reasoning": {{
+        "step1_extraction": {{
+            "target": "CPO",
+            "metric": "시장점유율",
+            "conditions": "top 5, 기타 언급 없음",
+            "output_format": "chart"
+        }}
+    }},
+    "needs_chart": true,
+    "show_table": true,
+    "output_format": "chart",
+    "chart_type": "pie",
+    "chart_title": "시장점유율 Top 5 CPO",
+    "analysis_type": "ranking",
+    "data_filter": {{
+        "sort_column": "시장점유율",
+        "display_column": "시장점유율",
+        "limit": 5,
+        "sort_order": "desc",
+        "include_others": false
+    }},
+    "chart_config": {{
+        "x_axis": "CPO명",
+        "y_axis": "시장점유율",
+        "y_axis_type": "percentage",
+        "y_axis_label": "시장점유율 (%)"
+    }}
+}}
+```
+
+### 예시 10: "시장점유율 top 5를 원형그래프로 그려줘, others로 나머지 표시" (기타 항목 + 영어 라벨)
 ```json
 {{
     "reasoning": {{
@@ -476,7 +524,7 @@ class QueryAnalyzer:
 }}
 ```
 
-### 예시 10: "시장점유율 top 3를 파이차트로, 기타 포함" (기타 항목 + 한국어 기본값)
+### 예시 11: "시장점유율 top 3를 파이차트로, 기타 포함" (기타 항목 + 한국어 기본값)
 ```json
 {{
     "reasoning": {{
@@ -1693,6 +1741,9 @@ JSON만 출력하세요.
     
     def process_query(self, query: str, df, full_df) -> dict:
         """전체 질의 처리 파이프라인"""
+        import time
+        total_start_time = time.time()  # 전체 처리 시간 측정 시작
+        
         self._log_separator(f'Agent 질의 처리 시작')
         print(f'📝 사용자 질의: "{query}"', flush=True)
         
@@ -1797,6 +1848,7 @@ JSON만 출력하세요.
             print(f'   └─ 이유: {confidence.get("reason", "N/A")}', flush=True)
             print(f'   └─ 메시지: {clarification_msg}', flush=True)
             
+            total_time = time.time() - total_start_time
             self._log_separator('Agent 처리 완료 (명확화 요청)')
             
             return {
@@ -1805,7 +1857,8 @@ JSON만 출력하세요.
                 'answer': clarification_msg,
                 'has_chart': False,
                 'needs_clarification': True,
-                'bedrock_time': 0
+                'bedrock_time': 0,
+                'total_time': round(total_time, 2)
             }
         
         # ========================================
@@ -1823,12 +1876,14 @@ JSON만 출력하세요.
             chart_data = self.extract_chart_data(full_df, intent)
             
             if chart_data.get('error'):
+                total_time = time.time() - total_start_time
                 print(f'   └─ ❌ 데이터 추출 실패: {chart_data["error"]}', flush=True)
                 return {
                     'success': False,
                     'error': chart_data['error'],
                     'has_chart': False,
-                    'bedrock_time': 0
+                    'bedrock_time': 0,
+                    'total_time': round(total_time, 2)
                 }
             
             # 데이터 추출 결과 로깅
@@ -1883,6 +1938,7 @@ JSON만 출력하세요.
             # ========================================
             # 처리 완료 요약
             # ========================================
+            total_time = time.time() - total_start_time
             self._log_separator('Agent 처리 완료')
             print(f'📊 처리 요약:', flush=True)
             print(f'   ├─ 질의: {query[:50]}...', flush=True)
@@ -1891,6 +1947,7 @@ JSON만 출력하세요.
             print(f'   ├─ 데이터 소스: S3 캐시 (메모리)', flush=True)
             print(f'   ├─ RAG 사용: {"예" if kb_context else "아니오"} ({len(kb_context)}자)', flush=True)
             print(f'   ├─ Bedrock 응답 시간: {bedrock_time:.2f}초', flush=True)
+            print(f'   ├─ 전체 처리 시간: {total_time:.2f}초', flush=True)
             print(f'   └─ 답변 길이: {len(answer)}자', flush=True)
             
             return {
@@ -1902,6 +1959,7 @@ JSON만 출력하세요.
                 'chart_type': intent.get('chart_type'),
                 'chart_title': intent.get('chart_title'),
                 'bedrock_time': round(bedrock_time, 2),
+                'total_time': round(total_time, 2),
                 'data_summary': {
                     'labels': chart_data.get('labels', []),
                     'values': chart_data.get('values', []),
@@ -1928,12 +1986,14 @@ JSON만 출력하세요.
             table_data = self.extract_chart_data(full_df, intent)
             
             if table_data.get('error'):
+                total_time = time.time() - total_start_time
                 print(f'   └─ ❌ 데이터 추출 실패: {table_data["error"]}', flush=True)
                 return {
                     'success': False,
                     'error': table_data['error'],
                     'has_chart': False,
-                    'bedrock_time': 0
+                    'bedrock_time': 0,
+                    'total_time': round(total_time, 2)
                 }
             
             # 다중 시리즈 여부 확인
@@ -1968,6 +2028,7 @@ JSON만 출력하세요.
             # ========================================
             # 처리 완료 요약
             # ========================================
+            total_time = time.time() - total_start_time
             self._log_separator('Agent 처리 완료 (표 모드)')
             print(f'📊 처리 요약:', flush=True)
             print(f'   ├─ 질의: {query[:50]}...', flush=True)
@@ -1976,6 +2037,7 @@ JSON만 출력하세요.
             print(f'   ├─ 데이터 소스: S3 캐시 (메모리)', flush=True)
             print(f'   ├─ RAG 사용: {"예" if kb_context else "아니오"} ({len(kb_context)}자)', flush=True)
             print(f'   ├─ Bedrock 응답 시간: {bedrock_time:.2f}초', flush=True)
+            print(f'   ├─ 전체 처리 시간: {total_time:.2f}초', flush=True)
             print(f'   └─ 답변 길이: {len(answer)}자', flush=True)
             
             return {
@@ -1985,6 +2047,7 @@ JSON만 출력하세요.
                 'has_chart': False,
                 'show_table': show_table,
                 'bedrock_time': round(bedrock_time, 2),
+                'total_time': round(total_time, 2),
                 'output_format': output_format,
                 'data_summary': {
                     'labels': table_data.get('labels', []),
