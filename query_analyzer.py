@@ -129,6 +129,45 @@ class QueryAnalyzer:
 | CPO명 | 충전사업자명 (예: GS차지비, 파워큐브) |
 | snapshot_month | 기준 연월 (예: 2025-10) |
 
+## 🔑 매우 중요: "전체 CPO" 용어 이해 (엑셀 셀 위치 기반)
+
+### "전체 CPO" 또는 "충전사업자" 키워드 처리 (대소문자/공백 무시)
+다음 표현들은 모두 **전체 합계 데이터**를 의미합니다:
+- "전체 CPO", "전체CPO", "전체cpo", "전체 cpo"
+- "전체 충전사업자", "전체충전사업자", "충전사업자"
+- "CPO 개수", "충전사업자 개수", "충전사업자 수"
+
+### 엑셀 셀 위치 매핑 (L3:P4 범위)
+
+#### 전체 현황 (3행 = 전체CPO 행)
+| 질의 표현 | 엑셀 셀 | 매핑 컬럼 |
+|-----------|---------|-----------|
+| 전체 CPO 개수, 충전사업자 개수 | L3 | total_cpos |
+| 전체 충전소 개수 | M3 | total_stations |
+| 전체 완속충전기 개수 | N3 | total_slow_chargers |
+| 전체 급속충전기 개수 | O3 | total_fast_chargers |
+| 전체 충전기 개수 | P3 | total_chargers |
+
+#### 당월 증감량 (4행 = 당월증감량 행)
+| 질의 표현 | 엑셀 셀 | 매핑 컬럼 |
+|-----------|---------|-----------|
+| 전체 CPO 당월 증감량 | L4 | change_cpos |
+| 전체 충전소 당월 증감량 | M4 | change_stations |
+| 전체 완속충전기 당월 증감량 | N4 | change_slow_chargers |
+| 전체 급속충전기 당월 증감량 | O4 | change_fast_chargers |
+| 전체 충전기 당월 증감량 | P4 | change_total_chargers |
+
+### 중요 규칙:
+1. "전체 CPO"는 모든 CPO를 나열하는 것이 **아닙니다**!
+2. "전체 CPO"는 엑셀 요약 행(L3:P4)의 합계 데이터를 의미합니다
+3. cpo_name: "전체"로 설정하면 엑셀 요약 행 데이터를 사용합니다
+4. display_column에 위 매핑 컬럼명을 사용합니다
+
+### 예시:
+- "전체 CPO 개수 변화" → cpo_name: "전체", display_column: "total_cpos"
+- "전체 완속충전기 증가량" → cpo_name: "전체", display_column: "change_slow_chargers"
+- "전체 급속충전기 당월 증감량" → cpo_name: "전체", display_column: "change_fast_chargers"
+
 ## ⚠️ 중요: 데이터에 없는 항목
 다음 항목들은 데이터베이스에 **직접 존재하지 않습니다**:
 - "증가률", "증가율", "성장률" → 계산 필요 (증감량 / 이전값 * 100)
@@ -148,6 +187,10 @@ class QueryAnalyzer:
 - 대상: 무엇에 대한 질의인가? (완속충전기, 급속충전기, 충전소 등)
 - 측정값: 어떤 값을 보고 싶은가? (개수, 증감량, 증가률, 점유율 등)
 - 조건: 기간, 특정 CPO, 상위/하위 몇 개 등
+- **CPO 범위**: 
+  - "전체 CPO", "충전사업자 개수", "CPO 개수" → cpo_name: "전체" (요약 행 데이터)
+  - "GS차지비", "에버온" 등 특정 CPO명 → cpo_name: 해당 CPO명
+  - CPO명 언급 없음 → cpo_name: null (전체 또는 상위 N개)
 - 출력형식: 
   - "chart" = 차트/그래프 키워드가 명시적으로 있음
   - "table" = 표/테이블 키워드가 있거나, 시각화 키워드가 없음 (기본값)
@@ -314,6 +357,89 @@ class QueryAnalyzer:
 }}
 ```
 
+### 예시 6: "2025년 1월부터 10월까지 전체 CPO 개수 변화를 알려줘" (엑셀 L3 데이터)
+```json
+{{
+    "reasoning": {{
+        "step1_extraction": {{
+            "target": "CPO 개수 (충전사업자 수)",
+            "metric": "개수 변화",
+            "conditions": "2025-01~2025-10, 전체 CPO (엑셀 L3)",
+            "cpo_scope": "전체 CPO = 엑셀 요약 행 L3 데이터"
+        }},
+        "step2_column_mapping": {{
+            "user_expression": "전체 CPO 개수",
+            "mapped_column": "total_cpos",
+            "mapping_reason": "전체 CPO 개수는 엑셀 L3 셀 값 (total_cpos)"
+        }}
+    }},
+    "needs_chart": false,
+    "show_table": true,
+    "output_format": "table",
+    "chart_type": "none",
+    "analysis_type": "trend",
+    "data_filter": {{
+        "cpo_name": "전체",
+        "start_month": "2025-01",
+        "end_month": "2025-10",
+        "sort_column": "snapshot_month",
+        "display_column": "total_cpos",
+        "sort_order": "asc"
+    }}
+}}
+```
+
+### 예시 7: "전체 CPO의 완속충전기 당월 증감량을 그래프로 그려줘" (엑셀 N4 데이터)
+```json
+{{
+    "reasoning": {{
+        "step1_extraction": {{
+            "target": "완속충전기",
+            "metric": "당월 증감량",
+            "conditions": "전체 CPO (엑셀 N4)",
+            "output_format": "chart"
+        }},
+        "step2_column_mapping": {{
+            "user_expression": "전체 완속충전기 증감량",
+            "mapped_column": "change_slow_chargers",
+            "mapping_reason": "전체 완속충전기 당월 증감량은 엑셀 N4 셀 값"
+        }}
+    }},
+    "needs_chart": true,
+    "show_table": true,
+    "output_format": "chart",
+    "chart_type": "line",
+    "analysis_type": "trend",
+    "data_filter": {{
+        "cpo_name": "전체",
+        "display_column": "change_slow_chargers"
+    }}
+}}
+```
+
+### 예시 8: "전체 충전사업자의 급속충전기 개수를 알려줘" (엑셀 O3 데이터)
+```json
+{{
+    "reasoning": {{
+        "step1_extraction": {{
+            "target": "급속충전기",
+            "metric": "개수",
+            "conditions": "전체 충전사업자 (엑셀 O3)"
+        }},
+        "step2_column_mapping": {{
+            "mapped_column": "total_fast_chargers"
+        }}
+    }},
+    "needs_chart": false,
+    "show_table": true,
+    "output_format": "table",
+    "data_filter": {{
+        "cpo_name": "전체",
+        "display_column": "total_fast_chargers"
+    }}
+}}
+```
+
 JSON만 출력하세요.
 """
         
@@ -453,6 +579,26 @@ JSON만 출력하세요.
                     return '총충전기'
                 col_str = str(col)
                 
+                # 영어 컬럼명 → 한국어 DataFrame 컬럼명 매핑 (엑셀 요약 행 컬럼)
+                english_to_korean_col = {
+                    # 전체 현황 (L3:P3) - DataFrame 컬럼명으로 변환
+                    'total_cpos': 'total_cpos',  # 엑셀 전용 (DataFrame에 없음)
+                    'total_stations': '충전소수',
+                    'total_slow_chargers': '완속충전기',
+                    'total_fast_chargers': '급속충전기',
+                    'total_chargers': '총충전기',
+                    # 당월 증감량 (L4:P4) - DataFrame 컬럼명으로 변환
+                    'change_cpos': 'change_cpos',  # 엑셀 전용 (DataFrame에 없음)
+                    'change_stations': '충전소증감',
+                    'change_slow_chargers': '완속증감',
+                    'change_fast_chargers': '급속증감',
+                    'change_total_chargers': '총증감',
+                }
+                
+                # 영어 컬럼명이면 한국어로 변환
+                if col_str in english_to_korean_col:
+                    return english_to_korean_col[col_str]
+                
                 # 정확한 매칭 우선 (더 구체적인 키를 먼저 체크)
                 exact_mapping = {
                     '완속증감': '완속증감',
@@ -501,6 +647,37 @@ JSON만 출력하세요.
                             converted.append(v)
                     return converted
                 return values
+            
+            # 영어 컬럼명 → 한국어 라벨 변환 함수
+            def to_korean_label(col_name):
+                """영어 컬럼명을 한국어 라벨로 변환"""
+                korean_mapping = {
+                    # 전체 현황 (L3:P3)
+                    'total_cpos': 'CPO 개수',
+                    'total_stations': '충전소 개수',
+                    'total_slow_chargers': '완속충전기 개수',
+                    'total_fast_chargers': '급속충전기 개수',
+                    'total_chargers': '전체충전기 개수',
+                    # 당월 증감량 (L4:P4)
+                    'change_cpos': 'CPO 증감량',
+                    'change_stations': '충전소 증감량',
+                    'change_slow_chargers': '완속충전기 증감량',
+                    'change_fast_chargers': '급속충전기 증감량',
+                    'change_total_chargers': '전체충전기 증감량',
+                    # 기존 한국어 컬럼명 (그대로 유지)
+                    '완속증감': '완속충전기 증감량',
+                    '급속증감': '급속충전기 증감량',
+                    '총증감': '전체충전기 증감량',
+                    '충전소증감': '충전소 증감량',
+                    '완속충전기': '완속충전기 개수',
+                    '급속충전기': '급속충전기 개수',
+                    '총충전기': '전체충전기 개수',
+                    '충전소수': '충전소 개수',
+                    '시장점유율': '시장점유율',
+                    '순위': '순위',
+                    '순위변동': '순위 변동',
+                }
+                return korean_mapping.get(col_name, col_name)
             
             # 다중 컬럼 지원 (리스트 또는 쉼표 구분 문자열)
             columns = []
@@ -583,14 +760,47 @@ JSON만 출력하세요.
                     unique_cpos = filtered_df['CPO명'].unique().tolist() if 'CPO명' in filtered_df.columns else []
                     print(f'      ├─ 필터링된 CPO: {unique_cpos[:5]}...', flush=True)
                 
-                # 전체 CPO 합계가 필요한 경우
-                # 엑셀의 L4:P4 행에서 직접 값을 가져옴
-                is_total_only_query = cpo_name is None  # 전체만 요청
-                is_total_with_cpo_query = has_total_cpo and actual_cpo_list  # 전체 + 특정 CPO 비교 요청
-                is_change_column = any(c in ['완속증감', '급속증감', '총증감', '충전소증감'] for c in columns)
+                # 전체 CPO 합계가 필요한 경우 (엑셀 L3:P4 범위)
+                # "전체", "전체CPO", "전체 CPO", "충전사업자" 등의 키워드 감지
+                def is_total_cpo_query(cpo_name_val):
+                    if cpo_name_val is None:
+                        return False
+                    if isinstance(cpo_name_val, list):
+                        return any(is_total_cpo_query(c) for c in cpo_name_val)
+                    cpo_lower = str(cpo_name_val).lower().replace(' ', '')
+                    total_keywords = ['전체', '전체cpo', '충전사업자', 'total', 'all']
+                    return any(kw in cpo_lower for kw in total_keywords)
                 
-                if (is_total_only_query or is_total_with_cpo_query) and is_change_column:
-                    print(f'      ├─ 📊 전체 CPO 합계 조회 - 엑셀 합계 행(L4:P4)에서 직접 추출', flush=True)
+                is_total_query = is_total_cpo_query(cpo_name)
+                is_total_with_cpo_query = has_total_cpo and actual_cpo_list  # 전체 + 특정 CPO 비교 요청
+                
+                # 전체 CPO 관련 컬럼 매핑 (엑셀 셀 위치 기반)
+                total_column_mapping = {
+                    # 전체 현황 (L3:P3)
+                    'total_cpos': ('total', 'cpos'),           # L3
+                    'total_stations': ('total', 'stations'),   # M3
+                    'total_slow_chargers': ('total', 'slow_chargers'),  # N3
+                    'total_fast_chargers': ('total', 'fast_chargers'),  # O3
+                    'total_chargers': ('total', 'total_chargers'),      # P3
+                    # 당월 증감량 (L4:P4)
+                    'change_cpos': ('change', 'cpos'),         # L4
+                    'change_stations': ('change', 'stations'), # M4
+                    'change_slow_chargers': ('change', 'slow_chargers'),  # N4
+                    'change_fast_chargers': ('change', 'fast_chargers'),  # O4
+                    'change_total_chargers': ('change', 'total_chargers'), # P4
+                    # 기존 컬럼명 호환
+                    '완속증감': ('change', 'slow_chargers'),
+                    '급속증감': ('change', 'fast_chargers'),
+                    '총증감': ('change', 'total_chargers'),
+                    '충전소증감': ('change', 'stations'),
+                }
+                
+                # 전체 CPO 관련 컬럼인지 확인
+                is_total_column = any(c in total_column_mapping for c in columns)
+                
+                if is_total_query and is_total_column:
+                    print(f'      ├─ 📊 전체 CPO 합계 조회 - 엑셀 요약 행(L3:P4)에서 직접 추출', flush=True)
+                    print(f'      ├─ 요청 컬럼: {columns}', flush=True)
                     
                     # 엑셀 파일에서 직접 합계 데이터 추출
                     from data_loader import ChargingDataLoader
@@ -607,13 +817,27 @@ JSON만 출력하세요.
                         
                         if snapshot_month and (not start_month or snapshot_month >= start_month) and (not end_month or snapshot_month <= end_month):
                             summary = loader.extract_summary_data(s3_key)
-                            if summary and 'change' in summary:
+                            if summary:
                                 monthly_totals[snapshot_month] = {
-                                    '완속증감': summary['change'].get('slow_chargers', 0),
-                                    '급속증감': summary['change'].get('fast_chargers', 0),
-                                    '총증감': summary['change'].get('total_chargers', 0),
-                                    '충전소증감': summary['change'].get('stations', 0)
+                                    # 전체 현황 (L3:P3)
+                                    'total_cpos': summary.get('total', {}).get('cpos', 0),
+                                    'total_stations': summary.get('total', {}).get('stations', 0),
+                                    'total_slow_chargers': summary.get('total', {}).get('slow_chargers', 0),
+                                    'total_fast_chargers': summary.get('total', {}).get('fast_chargers', 0),
+                                    'total_chargers': summary.get('total', {}).get('total_chargers', 0),
+                                    # 당월 증감량 (L4:P4)
+                                    'change_cpos': summary.get('change', {}).get('cpos', 0),
+                                    'change_stations': summary.get('change', {}).get('stations', 0),
+                                    'change_slow_chargers': summary.get('change', {}).get('slow_chargers', 0),
+                                    'change_fast_chargers': summary.get('change', {}).get('fast_chargers', 0),
+                                    'change_total_chargers': summary.get('change', {}).get('total_chargers', 0),
+                                    # 기존 컬럼명 호환
+                                    '완속증감': summary.get('change', {}).get('slow_chargers', 0),
+                                    '급속증감': summary.get('change', {}).get('fast_chargers', 0),
+                                    '총증감': summary.get('change', {}).get('total_chargers', 0),
+                                    '충전소증감': summary.get('change', {}).get('stations', 0),
                                 }
+                                print(f'      ├─ {snapshot_month}: 추출 완료', flush=True)
                     
                     if monthly_totals:
                         sorted_months = sorted(monthly_totals.keys())
@@ -625,8 +849,9 @@ JSON만 출력하세요.
                             # 1. 전체 CPO 시리즈 추가
                             for target_col in columns:
                                 values = [monthly_totals.get(m, {}).get(target_col, 0) for m in sorted_months]
-                                result['series'].append({'name': f'전체_{target_col}', 'values': values})
-                                print(f'      ├─ 시리즈 추가 (전체 CPO): 전체_{target_col} = {values[:3]}...', flush=True)
+                                korean_label = to_korean_label(target_col)
+                                result['series'].append({'name': f'전체 {korean_label}', 'values': values})
+                                print(f'      ├─ 시리즈 추가 (전체 CPO): 전체 {korean_label} = {values[:3]}...', flush=True)
                             
                             # 2. 특정 CPO 시리즈 추가
                             for cpo in actual_cpo_list:
@@ -654,8 +879,9 @@ JSON만 출력하세요.
                                             month_val = grouped[grouped['snapshot_month'] == m][target_col].values
                                             values.append(float(month_val[0]) if len(month_val) > 0 else 0)
                                         
-                                        result['series'].append({'name': f'{cpo}_{target_col}', 'values': values})
-                                        print(f'      ├─ 시리즈 추가 ({cpo}): {cpo}_{target_col} = {values[:3]}...', flush=True)
+                                        korean_label = to_korean_label(target_col)
+                                        result['series'].append({'name': f'{cpo} {korean_label}', 'values': values})
+                                        print(f'      ├─ 시리즈 추가 ({cpo}): {cpo} {korean_label} = {values[:3]}...', flush=True)
                             
                             result['y_axis_label'] = chart_config.get('y_axis_label', '값')
                             print(f'      └─ 전체+CPO 비교 완료: {len(result["series"])}개 시리즈', flush=True)
@@ -667,18 +893,20 @@ JSON만 출력하세요.
                             result = {'labels': sorted_months, 'series': [], 'multi_series': True}
                             for target_col in columns:
                                 values = [monthly_totals.get(m, {}).get(target_col, 0) for m in sorted_months]
-                                result['series'].append({'name': target_col, 'values': values})
-                                print(f'      ├─ 시리즈 추가 (엑셀 합계): {target_col} = {values[:3]}...', flush=True)
+                                korean_label = to_korean_label(target_col)
+                                result['series'].append({'name': korean_label, 'values': values})
+                                print(f'      ├─ 시리즈 추가 (엑셀 합계): {korean_label} = {values[:3]}...', flush=True)
                             result['y_axis_label'] = chart_config.get('y_axis_label', '값')
                             return result
                         else:
                             # 단일 컬럼
                             values = [monthly_totals.get(m, {}).get(col, 0) for m in sorted_months]
                             print(f'      └─ 추출된 값 (엑셀 합계): {values[:5]}...', flush=True)
+                            korean_label = to_korean_label(col)
                             return {
                                 'labels': sorted_months,
                                 'values': values,
-                                'y_axis_label': chart_config.get('y_axis_label', col)
+                                'y_axis_label': chart_config.get('y_axis_label', korean_label)
                             }
                 
                 # 다중 CPO + 다중 컬럼 조합 처리
@@ -705,15 +933,18 @@ JSON만 출력하세요.
                                     series_name = f'{cpo}_{target_col}'
                                     # 시장점유율 변환 적용
                                     values = convert_market_share(target_col, grouped[target_col].tolist())
+                                    korean_label = to_korean_label(target_col)
+                                    series_name_kr = f'{cpo} {korean_label}'
                                     result['series'].append({
-                                        'name': series_name,
+                                        'name': series_name_kr,
                                         'values': values
                                     })
-                                    print(f'      ├─ 시리즈 추가: {series_name} = {values[:3]}...', flush=True)
+                                    print(f'      ├─ 시리즈 추가: {series_name_kr} = {values[:3]}...', flush=True)
                     
                     # 다중 CPO + 단일 컬럼: CPO별 시리즈 생성
                     elif is_multi_cpo:
                         target_col = columns[0]
+                        korean_label = to_korean_label(target_col)
                         for cpo in unique_cpos:
                             cpo_df = filtered_df[filtered_df['CPO명'] == cpo]
                             if target_col in cpo_df.columns:
@@ -726,10 +957,10 @@ JSON만 출력하세요.
                                 # 시장점유율 변환 적용
                                 values = convert_market_share(target_col, grouped[target_col].tolist())
                                 result['series'].append({
-                                    'name': f'{cpo}',
+                                    'name': f'{cpo} {korean_label}',
                                     'values': values
                                 })
-                                print(f'      ├─ 시리즈 추가: {cpo} = {values[:3]}...', flush=True)
+                                print(f'      ├─ 시리즈 추가: {cpo} {korean_label} = {values[:3]}...', flush=True)
                     
                     # 단일 CPO + 다중 컬럼: 컬럼별 시리즈 생성
                     else:
@@ -747,14 +978,19 @@ JSON만 출력하세요.
                                 
                                 # 시장점유율 변환 적용
                                 values = convert_market_share(target_col, grouped[target_col].tolist())
+                                korean_label = to_korean_label(target_col)
                                 result['series'].append({
-                                    'name': target_col,
+                                    'name': korean_label,
                                     'values': values
                                 })
-                                print(f'      ├─ 시리즈 추가: {target_col} = {values[:3]}...', flush=True)
+                                print(f'      ├─ 시리즈 추가: {korean_label} = {values[:3]}...', flush=True)
                     
                     result['y_axis_label'] = chart_config.get('y_axis_label', '값')
-                    print(f'      └─ 다중 시리즈 완료: {len(result["series"])}개 시리즈', flush=True)
+                    print(f'      └─ ✅ 다중 시리즈 데이터 추출 완료', flush=True)
+                    print(f'         ├─ 시리즈 수: {len(result["series"])}개', flush=True)
+                    print(f'         ├─ 데이터 포인트: {len(result["labels"])}개', flush=True)
+                    for s in result['series']:
+                        print(f'         ├─ {s["name"]}: {s["values"][:3]}...', flush=True)
                     return result
                 
                 # 단일 컬럼인 경우
@@ -769,19 +1005,27 @@ JSON만 출력하세요.
                     # 시장점유율 변환 적용
                     values = convert_market_share(target_col, grouped[target_col].tolist())
                     print(f'      └─ 추출된 값: {values[:5]}...', flush=True)
-                    
+                    korean_label = to_korean_label(target_col)
                     return {
                         'labels': grouped['snapshot_month'].tolist(),
                         'values': values,
-                        'y_axis_label': chart_config.get('y_axis_label', target_col)
+                        'y_axis_label': chart_config.get('y_axis_label', korean_label)
                     }
             
             elif analysis_type == 'comparison':
                 # 전체 CPO + 특정 CPO 비교인 경우 (증감 컬럼)
-                is_change_column = any(c in ['완속증감', '급속증감', '총증감', '충전소증감'] for c in columns)
+                # 한국어 및 영어 컬럼명 모두 체크
+                change_columns_kr = ['완속증감', '급속증감', '총증감', '충전소증감']
+                change_columns_en = ['change_slow_chargers', 'change_fast_chargers', 'change_total_chargers', 'change_stations']
+                is_change_column = any(c in change_columns_kr or c in change_columns_en for c in columns)
                 
-                if has_total_cpo and is_change_column:
+                if has_total_cpo and (is_change_column or actual_cpo_list):
                     print(f'      ├─ 📊 전체 CPO + 특정 CPO 비교 (comparison)', flush=True)
+                    print(f'      ├─ 원본 컬럼: {columns}', flush=True)
+                    
+                    # 컬럼명 정규화 (영어 → 한국어)
+                    normalized_columns = [normalize_column(c) for c in columns]
+                    print(f'      ├─ 정규화된 컬럼: {normalized_columns}', flush=True)
                     
                     # 엑셀 파일에서 전체 합계 데이터 추출
                     from data_loader import ChargingDataLoader
@@ -797,23 +1041,31 @@ JSON만 출력하세요.
                         
                         if snapshot_month and (not start_month or snapshot_month >= start_month) and (not end_month or snapshot_month <= end_month):
                             summary = loader.extract_summary_data(s3_key)
-                            if summary and 'change' in summary:
+                            if summary:
                                 monthly_totals[snapshot_month] = {
-                                    '완속증감': summary['change'].get('slow_chargers', 0),
-                                    '급속증감': summary['change'].get('fast_chargers', 0),
-                                    '총증감': summary['change'].get('total_chargers', 0),
-                                    '충전소증감': summary['change'].get('stations', 0)
+                                    # 증감량 (change)
+                                    '완속증감': summary.get('change', {}).get('slow_chargers', 0),
+                                    '급속증감': summary.get('change', {}).get('fast_chargers', 0),
+                                    '총증감': summary.get('change', {}).get('total_chargers', 0),
+                                    '충전소증감': summary.get('change', {}).get('stations', 0),
+                                    # 전체 현황 (total)
+                                    '완속충전기': summary.get('total', {}).get('slow_chargers', 0),
+                                    '급속충전기': summary.get('total', {}).get('fast_chargers', 0),
+                                    '총충전기': summary.get('total', {}).get('total_chargers', 0),
+                                    '충전소수': summary.get('total', {}).get('stations', 0),
                                 }
                     
                     if monthly_totals:
                         sorted_months = sorted(monthly_totals.keys())
                         result = {'labels': sorted_months, 'series': [], 'multi_series': True}
                         
-                        # 1. 전체 CPO 시리즈 추가
-                        for target_col in columns:
+                        # 1. 전체 CPO 시리즈 추가 (정규화된 컬럼명 사용)
+                        for i, target_col in enumerate(normalized_columns):
+                            original_col = columns[i]  # 원본 컬럼명 (한국어 라벨용)
                             values = [monthly_totals.get(m, {}).get(target_col, 0) for m in sorted_months]
-                            result['series'].append({'name': f'전체_{target_col}', 'values': values})
-                            print(f'      ├─ 시리즈 추가 (전체 CPO): 전체_{target_col} = {values[:3]}...', flush=True)
+                            korean_label = to_korean_label(original_col)
+                            result['series'].append({'name': f'전체 {korean_label}', 'values': values})
+                            print(f'      ├─ 시리즈 추가 (전체 CPO): 전체 {korean_label} = {values[:3]}...', flush=True)
                         
                         # 2. 특정 CPO 시리즈 추가
                         for cpo in actual_cpo_list:
@@ -828,7 +1080,8 @@ JSON만 출력하세요.
                                 if end_month:
                                     cpo_df = cpo_df[cpo_df['snapshot_month'] <= end_month]
                             
-                            for target_col in columns:
+                            for i, target_col in enumerate(normalized_columns):
+                                original_col = columns[i]
                                 if target_col in cpo_df.columns:
                                     grouped = cpo_df.groupby('snapshot_month')[target_col].first().reset_index()
                                     grouped = grouped.sort_values('snapshot_month')
@@ -838,8 +1091,9 @@ JSON만 출력하세요.
                                         month_val = grouped[grouped['snapshot_month'] == m][target_col].values
                                         values.append(float(month_val[0]) if len(month_val) > 0 else 0)
                                     
-                                    result['series'].append({'name': f'{cpo}_{target_col}', 'values': values})
-                                    print(f'      ├─ 시리즈 추가 ({cpo}): {cpo}_{target_col} = {values[:3]}...', flush=True)
+                                    korean_label = to_korean_label(original_col)
+                                    result['series'].append({'name': f'{cpo} {korean_label}', 'values': values})
+                                    print(f'      ├─ 시리즈 추가 ({cpo}): {cpo} {korean_label} = {values[:3]}...', flush=True)
                         
                         result['y_axis_label'] = chart_config.get('y_axis_label', '값')
                         print(f'      └─ 전체+CPO 비교 완료: {len(result["series"])}개 시리즈', flush=True)
@@ -867,18 +1121,20 @@ JSON만 출력하세요.
                                     if not result['labels']:
                                         result['labels'] = grouped['snapshot_month'].tolist()
                                     
-                                    series_name = f'{cpo}_{target_col}'
+                                    korean_label = to_korean_label(target_col)
+                                    series_name_kr = f'{cpo} {korean_label}'
                                     # 시장점유율 변환 적용
                                     values = convert_market_share(target_col, grouped[target_col].tolist())
                                     result['series'].append({
-                                        'name': series_name,
+                                        'name': series_name_kr,
                                         'values': values
                                     })
-                                    print(f'      ├─ 시리즈 추가: {series_name} = {values[:3]}...', flush=True)
+                                    print(f'      ├─ 시리즈 추가: {series_name_kr} = {values[:3]}...', flush=True)
                     
                     # 다중 CPO + 단일 컬럼
                     elif is_multi_cpo:
                         target_col = columns[0]
+                        korean_label = to_korean_label(target_col)
                         for cpo in unique_cpos:
                             cpo_df = filtered_df[filtered_df['CPO명'] == cpo]
                             if target_col in cpo_df.columns:
@@ -891,10 +1147,10 @@ JSON만 출력하세요.
                                 # 시장점유율 변환 적용
                                 values = convert_market_share(target_col, grouped[target_col].tolist())
                                 result['series'].append({
-                                    'name': cpo,
+                                    'name': f'{cpo} {korean_label}',
                                     'values': values
                                 })
-                                print(f'      ├─ 시리즈 추가: {cpo} = {values[:3]}...', flush=True)
+                                print(f'      ├─ 시리즈 추가: {cpo} {korean_label} = {values[:3]}...', flush=True)
                     
                     # 단일 CPO + 다중 컬럼
                     else:
@@ -908,11 +1164,12 @@ JSON만 출력하세요.
                                 
                                 # 시장점유율 변환 적용
                                 values = convert_market_share(target_col, grouped[target_col].tolist())
+                                korean_label = to_korean_label(target_col)
                                 result['series'].append({
-                                    'name': target_col,
+                                    'name': korean_label,
                                     'values': values
                                 })
-                                print(f'      ├─ 시리즈 추가: {target_col} = {values[:3]}...', flush=True)
+                                print(f'      ├─ 시리즈 추가: {korean_label} = {values[:3]}...', flush=True)
                     
                     result['y_axis_label'] = chart_config.get('y_axis_label', '값')
                     print(f'      └─ 시계열 비교 완료: {len(result["series"])}개 시리즈', flush=True)

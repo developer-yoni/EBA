@@ -46,6 +46,7 @@ class ChartGenerator:
         for i, s in enumerate(series):
             color = colors[i % len(colors)]
             values = s['values']
+            series_name = s['name']  # 시리즈 이름을 변수로 추출
             
             # 값 길이가 labels와 다르면 None으로 패딩
             if len(values) != len(labels):
@@ -56,19 +57,21 @@ class ChartGenerator:
             series_code += f'''
 series_{i}_values = {values}
 # None 값을 제외하고 플롯
-valid_indices = [j for j, v in enumerate(series_{i}_values) if v is not None]
-valid_labels = [labels[j] for j in valid_indices]
-valid_values = [series_{i}_values[j] for j in valid_indices]
-if valid_values:
-    ax.plot(valid_labels, valid_values, marker='o', linewidth=2, markersize=6, 
-            color='{color}', label='{s['name']}')
+valid_indices_{i} = [j for j, v in enumerate(series_{i}_values) if v is not None]
+valid_labels_{i} = [labels[j] for j in valid_indices_{i}]
+valid_values_{i} = [series_{i}_values[j] for j in valid_indices_{i}]
+if valid_values_{i}:
+    ax.plot(valid_labels_{i}, valid_values_{i}, marker='o', linewidth=2, markersize=6, 
+            color='{color}', label='{series_name}')
 '''
             # 각 포인트에 값 표시 (시리즈별로 위/아래 오프셋 다르게)
-            offset = 8 if i % 2 == 0 else -15
+            offset = 10 if i % 2 == 0 else -18
             annotation_code += f'''
-for j, v in zip(valid_indices, valid_values):
-    ax.annotate(f'{{v:,.0f}}', (labels[j], v), textcoords="offset points",
-                xytext=(0, {offset}), ha='center', fontsize=7, color='{color}', alpha=0.8)
+for idx, (label, v) in enumerate(zip(valid_labels_{i}, valid_values_{i})):
+    ax.annotate(f'{{v:,.0f}}', (label, v), textcoords="offset points",
+                xytext=(0, {offset}), ha='center', fontsize=8, color='{color}', 
+                fontweight='bold', alpha=0.9,
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', edgecolor='{color}', alpha=0.7))
 '''
         
         return f'''
@@ -304,6 +307,9 @@ print(f"data:image/png;base64,{{img_base64}}")
             import subprocess
             import tempfile
             import sys
+            
+            # 디버깅: 생성된 코드 출력
+            print(f'   └─ 📝 생성된 차트 코드 (처음 1500자):\n{code[:1500]}...', flush=True)
             
             # 임시 파일에 코드 저장
             with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
