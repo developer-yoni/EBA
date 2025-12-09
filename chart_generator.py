@@ -79,8 +79,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import base64
 import io
+import platform
 
-plt.rcParams['font.family'] = 'AppleGothic'
+# OS에 따른 한글 폰트 설정
+if platform.system() == 'Darwin':  # macOS
+    plt.rcParams['font.family'] = 'AppleGothic'
+elif platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Malgun Gothic'
+else:  # Linux
+    plt.rcParams['font.family'] = 'NanumGothic'
 plt.rcParams['axes.unicode_minus'] = False
 
 labels = {labels}
@@ -118,9 +125,15 @@ import matplotlib.font_manager as fm
 import numpy as np
 import base64
 import io
+import platform
 
-# 한글 폰트 설정
-plt.rcParams['font.family'] = 'AppleGothic'  # macOS
+# OS에 따른 한글 폰트 설정
+if platform.system() == 'Darwin':  # macOS
+    plt.rcParams['font.family'] = 'AppleGothic'
+elif platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Malgun Gothic'
+else:  # Linux
+    plt.rcParams['font.family'] = 'NanumGothic'
 plt.rcParams['axes.unicode_minus'] = False
 
 # 데이터
@@ -174,8 +187,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import base64
 import io
+import platform
 
-plt.rcParams['font.family'] = 'AppleGothic'
+# OS에 따른 한글 폰트 설정
+if platform.system() == 'Darwin':  # macOS
+    plt.rcParams['font.family'] = 'AppleGothic'
+elif platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Malgun Gothic'
+else:  # Linux
+    plt.rcParams['font.family'] = 'NanumGothic'
 plt.rcParams['axes.unicode_minus'] = False
 
 labels = {data.get('labels', [])}
@@ -238,8 +258,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import base64
 import io
+import platform
 
-plt.rcParams['font.family'] = 'AppleGothic'
+# OS에 따른 한글 폰트 설정
+if platform.system() == 'Darwin':  # macOS
+    plt.rcParams['font.family'] = 'AppleGothic'
+elif platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Malgun Gothic'
+else:  # Linux
+    plt.rcParams['font.family'] = 'NanumGothic'
 plt.rcParams['axes.unicode_minus'] = False
 
 labels = {data.get('labels', [])}
@@ -280,8 +307,15 @@ print(f"data:image/png;base64,{{img_base64}}")
 import matplotlib.pyplot as plt
 import base64
 import io
+import platform
 
-plt.rcParams['font.family'] = 'AppleGothic'
+# OS에 따른 한글 폰트 설정
+if platform.system() == 'Darwin':  # macOS
+    plt.rcParams['font.family'] = 'AppleGothic'
+elif platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Malgun Gothic'
+else:  # Linux
+    plt.rcParams['font.family'] = 'NanumGothic'
 plt.rcParams['axes.unicode_minus'] = False
 
 labels = {data.get('labels', [])}
@@ -320,8 +354,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import base64
 import io
+import platform
 
-plt.rcParams['font.family'] = 'AppleGothic'
+# OS에 따른 한글 폰트 설정
+if platform.system() == 'Darwin':  # macOS
+    plt.rcParams['font.family'] = 'AppleGothic'
+elif platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Malgun Gothic'
+else:  # Linux
+    plt.rcParams['font.family'] = 'NanumGothic'
 plt.rcParams['axes.unicode_minus'] = False
 
 labels = {data.get('labels', [])}
@@ -352,58 +393,50 @@ print(f"data:image/png;base64,{{img_base64}}")
 '''
     
     def execute_chart_code(self, code: str) -> dict:
-        """차트 코드 실행 및 이미지 반환"""
+        """차트 코드 실행 및 이미지 반환 (exec 방식 - 현재 환경 사용)"""
         try:
-            # 로컬 실행 (matplotlib 사용)
-            import subprocess
-            import tempfile
-            import sys
+            import matplotlib
+            matplotlib.use('Agg')  # GUI 없이 렌더링
+            import matplotlib.pyplot as plt
             
             # 디버깅: 생성된 코드 출력
             print(f'   └─ 📝 생성된 차트 코드 (처음 1500자):\n{code[:1500]}...', flush=True)
             
-            # 임시 파일에 코드 저장
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(code)
-                temp_file = f.name
+            # print 출력을 캡처하기 위한 StringIO
+            from io import StringIO
+            import sys
             
-            # 현재 Python 인터프리터 사용 (conda 환경 유지)
-            result = subprocess.run(
-                [sys.executable, temp_file],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            # stdout 캡처
+            old_stdout = sys.stdout
+            sys.stdout = captured_output = StringIO()
             
-            # 임시 파일 삭제
-            os.unlink(temp_file)
+            # 코드 실행을 위한 로컬 네임스페이스
+            local_namespace = {}
             
-            if result.returncode == 0:
-                # stdout에서 base64 이미지 추출
-                output = result.stdout.strip()
-                if output.startswith('data:image'):
-                    return {
-                        'success': True,
-                        'image': output
-                    }
-                else:
-                    return {
-                        'success': False,
-                        'error': f'Invalid output: {output[:100]}'
-                    }
+            try:
+                # 코드 직접 실행 (현재 환경의 패키지 사용)
+                exec(code, local_namespace)
+            finally:
+                # stdout 복원
+                sys.stdout = old_stdout
+            
+            # 캡처된 출력 가져오기
+            output = captured_output.getvalue().strip()
+            
+            if output.startswith('data:image'):
+                return {
+                    'success': True,
+                    'image': output
+                }
             else:
                 return {
                     'success': False,
-                    'error': result.stderr
+                    'error': f'Invalid output: {output[:200] if output else "No output"}'
                 }
                 
-        except subprocess.TimeoutExpired:
-            return {
-                'success': False,
-                'error': '차트 생성 시간 초과'
-            }
         except Exception as e:
+            import traceback
             return {
                 'success': False,
-                'error': str(e)
+                'error': f'{str(e)}\n{traceback.format_exc()}'
             }
