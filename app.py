@@ -262,8 +262,21 @@ def get_dashboard():
         # 현재 선택된 월의 요약 테이블 - 엑셀 K2:P4에서 직접 추출
         summary_table = None
         if current_data is not None and len(current_data) > 0:
-            # 가장 최근 월의 파일 경로 찾기
-            data_source = current_data['data_source'].iloc[-1] if 'data_source' in current_data.columns else None
+            # end_month에 해당하는 파일에서 요약 데이터 추출 (정렬 문제 해결)
+            data_source = None
+            if end_month and 'snapshot_month' in current_data.columns:
+                # end_month에 해당하는 데이터에서 파일 경로 찾기
+                end_month_data = current_data[current_data['snapshot_month'] == end_month]
+                if len(end_month_data) > 0 and 'data_source' in end_month_data.columns:
+                    data_source = end_month_data['data_source'].iloc[0]
+                    print(f'📊 end_month({end_month})에서 data_source 찾음: {data_source}', flush=True)
+            
+            # end_month로 찾지 못한 경우 snapshot_month 기준 최신 데이터 사용
+            if not data_source and 'data_source' in current_data.columns:
+                sorted_data = current_data.sort_values('snapshot_month', ascending=False)
+                data_source = sorted_data['data_source'].iloc[0]
+                print(f'📊 정렬 후 최신 data_source: {data_source}', flush=True)
+            
             if data_source:
                 loader = ChargingDataLoader()
                 summary_table = loader.extract_summary_data(data_source)
