@@ -4,9 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EV Charging Infra Metrics & Trend Analysis</title>
+    <!-- Pretendard Variable 폰트 CDN -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
+        /* ========================================
+           Typography System - CSS Variables
+           ======================================== */
+        :root {
+            /* Font Family */
+            --font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            
+            /* Font Weights */
+            --fw-bold: 700;      /* 대제목, KPI 숫자용 */
+            --fw-semibold: 600;  /* 섹션 제목, 차트 타이틀용 */
+            --fw-medium: 500;    /* 데이터 테이블, 작은 라벨용 */
+            --fw-regular: 400;   /* 일반 긴 문장용 */
+            
+            /* Line Heights */
+            --lh-tight: 1.3;     /* 제목용 */
+            --lh-normal: 1.6;    /* 본문용 */
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -14,9 +34,50 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-family: var(--font-family);
+            font-weight: var(--fw-regular);
             background: #f5f7fa;
             color: #333;
+            line-height: var(--lh-normal);
+        }
+        
+        /* ========================================
+           Typography - Headings
+           ======================================== */
+        h1 {
+            font-weight: var(--fw-bold);
+            letter-spacing: -0.02em;
+            line-height: var(--lh-tight);
+        }
+        
+        h2, h3 {
+            font-weight: var(--fw-semibold);
+            line-height: var(--lh-tight);
+        }
+        
+        /* ========================================
+           Typography - Body Text
+           ======================================== */
+        p {
+            font-weight: var(--fw-regular);
+            line-height: var(--lh-normal);
+        }
+        
+        span, td {
+            font-weight: var(--fw-regular);
+        }
+        
+        /* Data text class - 데이터 테이블, 작은 라벨용 */
+        .data-text,
+        td.data-text,
+        span.data-text {
+            font-weight: var(--fw-medium);
+        }
+        
+        /* KPI 숫자용 */
+        .kpi-value {
+            font-weight: var(--fw-bold);
+            letter-spacing: -0.02em;
         }
         
         .container {
@@ -37,6 +98,7 @@
         h1 {
             font-size: 28px;
             margin-bottom: 10px;
+            /* font-weight, letter-spacing, line-height는 상단 Typography System에서 정의됨 */
         }
         
         .subtitle {
