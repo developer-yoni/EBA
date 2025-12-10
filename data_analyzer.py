@@ -414,6 +414,190 @@ class ChargingDataAnalyzer:
             'end_month': end_month
         }
     
+    def simulate_market_share_prediction(self, base_month, simulation_months=12, additional_chargers=0):
+        """시장점유율 시뮬레이션 예측"""
+        if 'snapshot_month' not in self.df.columns or 'CPO명' not in self.df.columns:
+            return None
+        
+        print(f'🎯 시뮬레이션 파라미터: 기준월={base_month}, 기간={simulation_months}개월, 추가충전기={additional_chargers}대', flush=True)
+        
+        # 기준월 데이터
+        base_data = self.df[self.df['snapshot_month'] == base_month].copy()
+        if len(base_data) == 0:
+            return {'error': f'{base_month} 데이터를 찾을 수 없습니다'}
+        
+        # GS차지비 현재 데이터
+        gs_base = base_data[base_data['CPO명'] == 'GS차지비']
+        if len(gs_base) == 0:
+            return {'error': 'GS차지비 데이터를 찾을 수 없습니다'}
+        
+        gs_row = gs_base.iloc[0]
+        
+        # 현재 시장점유율 파싱
+        try:
+            current_share_raw = gs_row.get('시장점유율', '0%')
+            if isinstance(current_share_raw, str):
+                current_share = float(current_share_raw.replace('%', '').strip())
+            else:
+                current_share = float(current_share_raw) * 100 if current_share_raw < 1 else float(current_share_raw)
+        except:
+            current_share = 0.0
+        
+        current_chargers = int(gs_row.get('총충전기', 0))
+        total_market_chargers = int(base_data['총충전기'].sum())
+        
+        print(f'📊 현재 상황: GS차지비 {current_chargers}대, 전체시장 {total_market_chargers}대, 점유율 {current_share}%', flush=True)
+        
+        # 과거 데이터로부터 성장률 계산
+        historical_data = self.df[self.df['snapshot_month'] <= base_month].copy()
+        monthly_growth_rates = self._calculate_growth_rates(historical_data)
+        
+        # 시뮬레이션 실행
+        simulation_result = []
+        
+        # 기준월부터 시작
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
+        
+        base_date = datetime.strptime(base_month, '%Y-%m')
+        
+        # 현재 값으로 시작
+        current_gs_chargers = current_chargers
+        current_total_chargers = total_market_chargers
+        
+        for i in range(simulation_months + 1):  # 기준월 포함
+            sim_date = base_date + relativedelta(months=i)
+            sim_month = sim_date.strftime('%Y-%m')
+            
+            if i == 0:
+                # 기준월 (현재 값)
+                predicted_share = current_share
+                gs_chargers = current_gs_chargers
+                total_chargers = current_total_chargers
+            else:
+                # 예측 계산
+                # 시장 성장률 (GS차지비 제외한 나머지 시장)
+                market_monthly_growth = monthly_growth_rates.get('market_growth', 0.015)  # 시장 전체 1.5% 성장
+                
+                # 추가 충전기를 월별로 분산 설치 (기준월 대비 추가 설치)
+                monthly_additional = additional_chargers / simulation_months if simulation_months > 0 else 0
+                
+                # GS차지비 충전기 수 = 기준월 충전기 + 추가 설치 (기본 성장률 제외, 순수 추가분만)
+                gs_chargers = current_gs_chargers + (monthly_additional * i)
+                
+                # 전체 시장 충전기 수 증가 (GS차지비 추가분 포함)
+                # 시장 기본 성장 + GS차지비 추가 설치분
+                other_market_chargers = (current_total_chargers - current_gs_chargers) * (1 + market_monthly_growth) ** i
+                total_chargers = other_market_chargers + gs_chargers
+                
+                # 시장점유율 계산
+                predicted_share = (gs_chargers / total_chargers) * 100 if total_chargers > 0 else 0
+            
+            simulation_result.append({
+                'month': sim_month,
+                'gs_chargers': int(gs_chargers),
+                'total_market_chargers': int(total_chargers),
+                'market_share': round(predicted_share, 2),
+                'is_prediction': i > 0
+            })
+        
+        # 시나리오 비교 (추가 충전기 없는 경우 = 기준월 그대로 유지)
+        baseline_result = []
+        for i in range(simulation_months + 1):
+            sim_date = base_date + relativedelta(months=i)
+            sim_month = sim_date.strftime('%Y-%m')
+            
+            if i == 0:
+                baseline_share = current_share
+                baseline_gs = current_gs_chargers
+            else:
+                market_monthly_growth = monthly_growth_rates.get('market_growth', 0.015)
+                
+                # 기준선: GS차지비는 기준월 그대로 유지 (추가 설치 없음)
+                baseline_gs = current_gs_chargers
+                # 다른 시장은 계속 성장
+                other_market_chargers = (current_total_chargers - current_gs_chargers) * (1 + market_monthly_growth) ** i
+                baseline_total = other_market_chargers + baseline_gs
+                baseline_share = (baseline_gs / baseline_total) * 100 if baseline_total > 0 else 0
+            
+            baseline_result.append({
+                'month': sim_month,
+                'market_share': round(baseline_share, 2)
+            })
+        
+        print(f'✅ 시뮬레이션 완료: {len(simulation_result)}개월 예측', flush=True)
+        
+        return {
+            'base_month': base_month,
+            'simulation_months': simulation_months,
+            'additional_chargers': additional_chargers,
+            'current_status': {
+                'market_share': current_share,
+                'gs_chargers': current_chargers,
+                'total_market_chargers': total_market_chargers
+            },
+            'prediction': simulation_result,
+            'baseline': baseline_result,
+            'growth_rates': monthly_growth_rates,
+            'final_prediction': {
+                'market_share': simulation_result[-1]['market_share'] if simulation_result else 0,
+                'market_share_increase': simulation_result[-1]['market_share'] - current_share if simulation_result else 0,
+                'baseline_share': baseline_result[-1]['market_share'] if baseline_result else 0,
+                'additional_effect': simulation_result[-1]['market_share'] - baseline_result[-1]['market_share'] if simulation_result and baseline_result else 0
+            }
+        }
+    
+    def _calculate_growth_rates(self, historical_data):
+        """과거 데이터로부터 성장률 계산"""
+        if 'snapshot_month' not in historical_data.columns:
+            return {'gs_growth': 0.02, 'market_growth': 0.015}
+        
+        # 월별 데이터 정렬
+        monthly_data = historical_data.groupby('snapshot_month').agg({
+            '총충전기': 'sum'
+        }).reset_index().sort_values('snapshot_month')
+        
+        if len(monthly_data) < 2:
+            return {'gs_growth': 0.02, 'market_growth': 0.015}
+        
+        # GS차지비 월별 데이터
+        gs_monthly = historical_data[historical_data['CPO명'] == 'GS차지비'].groupby('snapshot_month').agg({
+            '총충전기': 'sum'
+        }).reset_index().sort_values('snapshot_month')
+        
+        # 성장률 계산 (최근 3개월 평균)
+        market_growth_rates = []
+        gs_growth_rates = []
+        
+        for i in range(1, min(len(monthly_data), 4)):  # 최근 3개월
+            prev_total = monthly_data.iloc[-i-1]['총충전기']
+            curr_total = monthly_data.iloc[-i]['총충전기']
+            
+            if prev_total > 0:
+                market_growth = (curr_total - prev_total) / prev_total
+                market_growth_rates.append(market_growth)
+        
+        for i in range(1, min(len(gs_monthly), 4)):  # 최근 3개월
+            prev_gs = gs_monthly.iloc[-i-1]['총충전기']
+            curr_gs = gs_monthly.iloc[-i]['총충전기']
+            
+            if prev_gs > 0:
+                gs_growth = (curr_gs - prev_gs) / prev_gs
+                gs_growth_rates.append(gs_growth)
+        
+        # 평균 성장률 계산
+        avg_market_growth = np.mean(market_growth_rates) if market_growth_rates else 0.015
+        avg_gs_growth = np.mean(gs_growth_rates) if gs_growth_rates else 0.02
+        
+        # 음수나 극단값 제한
+        avg_market_growth = max(0, min(avg_market_growth, 0.1))  # 0~10% 제한
+        avg_gs_growth = max(0, min(avg_gs_growth, 0.15))  # 0~15% 제한
+        
+        return {
+            'market_growth': avg_market_growth,
+            'gs_growth': avg_gs_growth
+        }
+
     def generate_insights(self):
         """전체 인사이트 생성"""
         insights = {

@@ -1211,6 +1211,53 @@ def get_gs_kpi():
             'error': str(e)
         }), 500
 
+@app.route('/api/simulation/predict', methods=['POST'])
+def predict_market_share():
+    """시장점유율 시뮬레이션 예측"""
+    try:
+        data = request.json
+        base_month = data.get('baseMonth')
+        simulation_months = data.get('simulationMonths', 12)
+        additional_chargers = data.get('additionalChargers', 0)
+        
+        if not base_month:
+            return jsonify({
+                'success': False,
+                'error': '기준월을 선택해주세요'
+            }), 400
+        
+        if cache['full_data'] is None:
+            return jsonify({
+                'success': False,
+                'error': '먼저 데이터를 로드해주세요'
+            }), 400
+        
+        print(f'🎯 시뮬레이션 시작: 기준월={base_month}, 기간={simulation_months}개월, 추가충전기={additional_chargers}대', flush=True)
+        
+        # 시뮬레이션 로직 실행
+        from data_analyzer import ChargingDataAnalyzer
+        analyzer = ChargingDataAnalyzer(cache['full_data'])
+        
+        # 시장점유율 예측 계산
+        prediction_result = analyzer.simulate_market_share_prediction(
+            base_month=base_month,
+            simulation_months=simulation_months,
+            additional_chargers=additional_chargers
+        )
+        
+        return jsonify({
+            'success': True,
+            'prediction': prediction_result
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 def initialize_data():
     """앱 시작 시 자동으로 모든 데이터 로드"""
     try:

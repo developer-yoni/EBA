@@ -1272,6 +1272,94 @@
             font-size: 13px;
             position: relative;
         }
+        
+        /* ========================================
+           Simulation Tab Styles
+           ======================================== */
+        .simulation-controls {
+            background: var(--bg-surface);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-primary);
+        }
+        
+        .control-section h4 {
+            color: var(--text-primary);
+            font-weight: var(--fw-semibold);
+            margin-bottom: 16px;
+            font-size: 16px;
+        }
+        
+        /* 슬라이더 스타일 */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            background: var(--bg-surface);
+            border-radius: 4px;
+            outline: none;
+            border: 1px solid var(--border-primary);
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: var(--brand-gradient);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: var(--shadow-sm);
+            border: 2px solid white;
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: var(--brand-gradient);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: var(--shadow-sm);
+            border: 2px solid white;
+        }
+        
+        input[type="range"]:hover::-webkit-slider-thumb {
+            transform: scale(1.1);
+            box-shadow: var(--shadow-md);
+        }
+        
+        input[type="range"]:hover::-moz-range-thumb {
+            transform: scale(1.1);
+            box-shadow: var(--shadow-md);
+        }
+        
+        /* 시뮬레이션 결과 카드 */
+        .simulation-summary-card {
+            background: var(--bg-surface);
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid var(--border-primary);
+            transition: all 0.2s ease;
+        }
+        
+        .simulation-summary-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .simulation-value {
+            font-size: 24px;
+            font-weight: var(--fw-bold);
+            margin-bottom: 4px;
+        }
+        
+        .simulation-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
     </style>
 </head>
 <body>
@@ -1302,6 +1390,7 @@
             <button class="tab active" onclick="switchTab('dashboard')">📊 DASHBOARD</button>
             <button class="tab" onclick="switchTab('report')">🤖 AI REPORT</button>
             <button class="tab" onclick="switchTab('query')">💬 Q&A</button>
+            <button class="tab" onclick="switchTab('simulation')">🎯 SIMULATION</button>
         </div>
         
         <!-- 탭 컨텐츠 -->
@@ -1468,6 +1557,83 @@
                 <div id="queryResult" style="margin-top: 20px;"></div>
             </div>
         </div>
+        
+        <!-- 시뮬레이션 탭 -->
+        <div id="simulationTab" class="tab-content">
+            <div class="card" style="margin-bottom: 20px;">
+                <h3>🎯 Scenario Simulator</h3>
+                <p style="color: #718096; margin-bottom: 20px;">
+                    GS차지비의 충전기 추가 설치 시나리오를 시뮬레이션하여 미래 시장점유율을 예측합니다.
+                </p>
+                
+                <!-- 시뮬레이션 설정 -->
+                <div class="simulation-controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+                    <!-- 좌측: 기본 설정 -->
+                    <div class="control-section">
+                        <h4 style="margin-bottom: 16px; color: var(--text-primary);">📅 기본 설정</h4>
+                        
+                        <div style="margin-bottom: 16px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">기준월:</label>
+                            <select id="simBaseMonth" class="month-select" style="width: 100%;">
+                                <option value="">선택하세요</option>
+                            </select>
+                        </div>
+                        
+                        <div style="margin-bottom: 16px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">시뮬레이션 기간:</label>
+                            <select id="simMonths" class="month-select" style="width: 100%;">
+                                <option value="6">6개월</option>
+                                <option value="12" selected>12개월</option>
+                                <option value="18">18개월</option>
+                                <option value="24">24개월</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- 우측: 시나리오 설정 -->
+                    <div class="control-section">
+                        <h4 style="margin-bottom: 16px; color: var(--text-primary);">⚡ 시나리오 설정</h4>
+                        
+                        <div style="margin-bottom: 16px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">
+                                추가 설치 충전기 수: <span id="chargerCountDisplay" style="color: var(--brand-primary); font-weight: var(--fw-bold);">0대</span>
+                            </label>
+                            <input type="range" id="chargerSlider" min="0" max="5000" step="100" value="0" 
+                                   style="width: 100%; margin-bottom: 8px;" oninput="updateChargerCount()">
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted);">
+                                <span>0대</span>
+                                <span>2,500대</span>
+                                <span>5,000대</span>
+                            </div>
+                        </div>
+                        
+                        <button class="btn" onclick="runSimulation()" id="runSimBtn" style="width: 100%; margin-top: 8px;">
+                            🚀 시뮬레이션 실행
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 시뮬레이션 결과 -->
+            <div id="simulationResults" class="hidden">
+                <!-- 현재 상황 vs 예측 결과 -->
+                <div class="card" style="margin-bottom: 20px;">
+                    <h3>📊 시뮬레이션 결과</h3>
+                    <div id="simulationSummary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;"></div>
+                </div>
+                
+                <!-- 인터랙티브 차트 -->
+                <div class="card">
+                    <h3>📈 시장점유율 예측 차트</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                        파란선: 현재 성장률 유지 시나리오 | 주황선: 추가 충전기 설치 시나리오
+                    </p>
+                    <div style="height: 350px; max-height: 350px;">
+                        <canvas id="simulationChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -1504,6 +1670,10 @@
                 document.getElementById('reportTab').classList.add('active');
             } else if (tabName === 'query') {
                 document.getElementById('queryTab').classList.add('active');
+            } else if (tabName === 'simulation') {
+                document.getElementById('simulationTab').classList.add('active');
+                // 시뮬레이션 탭 진입 시 월 목록 로드
+                loadSimulationMonths();
             }
         }
         
@@ -3298,6 +3468,11 @@
                 // 차트가 있는 카드만 확장 가능하게 설정
                 const canvas = card.querySelector('canvas');
                 if (canvas) {
+                    // 시뮬레이션 차트는 모달에서 제외
+                    if (canvas.id === 'simulationChart') {
+                        console.log('📊 시뮬레이션 차트 - 모달 제외:', canvas.id);
+                        return;
+                    }
                     console.log('📊 차트 카드 발견:', canvas.id, card);
                     card.classList.add('expandable');
                     card.setAttribute('data-card-id', `card-${index}`);
@@ -3709,6 +3884,255 @@
                 </div>
                 ${tableHTML}
             `;
+        }
+        
+        // 시뮬레이션 관련 변수
+        let simulationChart = null;
+        
+        // 시뮬레이션 월 목록 로드
+        function loadSimulationMonths() {
+            if (availableMonths.length > 0) {
+                const select = document.getElementById('simBaseMonth');
+                select.innerHTML = '<option value="">선택하세요</option>';
+                
+                availableMonths.forEach(month => {
+                    const option = document.createElement('option');
+                    option.value = month;
+                    option.textContent = month;
+                    select.appendChild(option);
+                });
+                
+                // 최신월을 기본 선택
+                if (availableMonths.length > 0) {
+                    select.value = availableMonths[0];
+                }
+            }
+        }
+        
+        // 충전기 수 슬라이더 업데이트
+        function updateChargerCount() {
+            const slider = document.getElementById('chargerSlider');
+            const display = document.getElementById('chargerCountDisplay');
+            const value = parseInt(slider.value);
+            display.textContent = `${value.toLocaleString()}대`;
+        }
+        
+        // 시뮬레이션 실행
+        async function runSimulation() {
+            const baseMonth = document.getElementById('simBaseMonth').value;
+            const simulationMonths = parseInt(document.getElementById('simMonths').value);
+            const additionalChargers = parseInt(document.getElementById('chargerSlider').value);
+            
+            if (!baseMonth) {
+                alert('기준월을 선택해주세요.');
+                return;
+            }
+            
+            const btn = document.getElementById('runSimBtn');
+            const originalText = btn.textContent;
+            btn.textContent = '🔄 시뮬레이션 중...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/simulation/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        baseMonth: baseMonth,
+                        simulationMonths: simulationMonths,
+                        additionalChargers: additionalChargers
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displaySimulationResults(result.prediction);
+                } else {
+                    alert('시뮬레이션 실패: ' + result.error);
+                }
+            } catch (error) {
+                console.error('시뮬레이션 오류:', error);
+                alert('시뮬레이션 중 오류가 발생했습니다.');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+        
+        // 시뮬레이션 결과 표시
+        function displaySimulationResults(data) {
+            const resultsDiv = document.getElementById('simulationResults');
+            const summaryDiv = document.getElementById('simulationSummary');
+            
+            // 결과 요약 카드들
+            const currentStatus = data.current_status;
+            const finalPrediction = data.final_prediction;
+            
+            summaryDiv.innerHTML = `
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--brand-primary); margin-bottom: 4px;">
+                        ${currentStatus.market_share.toFixed(1)}%
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">현재 시장점유율</div>
+                </div>
+                
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--success); margin-bottom: 4px;">
+                        ${finalPrediction.market_share.toFixed(1)}%
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">${data.simulation_months}개월 후 예측</div>
+                </div>
+                
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--warning); margin-bottom: 4px;">
+                        +${finalPrediction.market_share_increase.toFixed(1)}%p
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">점유율 증가</div>
+                </div>
+                
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--info); margin-bottom: 4px;">
+                        +${finalPrediction.additional_effect.toFixed(1)}%p
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">추가 충전기 효과</div>
+                </div>
+            `;
+            
+            // 차트 생성
+            createSimulationChart(data);
+            
+            // 결과 영역 표시
+            resultsDiv.classList.remove('hidden');
+        }
+        
+        // 시뮬레이션 차트 생성
+        function createSimulationChart(data) {
+            const ctx = document.getElementById('simulationChart').getContext('2d');
+            
+            // 기존 차트 제거
+            if (simulationChart) {
+                simulationChart.destroy();
+            }
+            
+            const months = data.prediction.map(p => p.month);
+            const predictionData = data.prediction.map(p => p.market_share);
+            const baselineData = data.baseline.map(b => b.market_share);
+            
+            // 현재 데이터와 예측 데이터 구분
+            const currentIndex = data.prediction.findIndex(p => p.is_prediction);
+            const currentMonths = months.slice(0, currentIndex);
+            const futureMonths = months.slice(currentIndex - 1); // 연결점 포함
+            
+            const currentPrediction = predictionData.slice(0, currentIndex);
+            const futurePrediction = predictionData.slice(currentIndex - 1);
+            
+            const currentBaseline = baselineData.slice(0, currentIndex);
+            const futureBaseline = baselineData.slice(currentIndex - 1);
+            
+            simulationChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [
+                        {
+                            label: '현재 추세 (기준선)',
+                            data: currentBaseline.concat(new Array(futureBaseline.length - 1).fill(null)),
+                            borderColor: '#94a3b8',
+                            backgroundColor: 'rgba(148, 163, 184, 0.1)',
+                            borderWidth: 2,
+                            fill: false,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: '기준선 예측',
+                            data: new Array(currentBaseline.length - 1).fill(null).concat(futureBaseline),
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: '현재 실적',
+                            data: currentPrediction.concat(new Array(futurePrediction.length - 1).fill(null)),
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderWidth: 3,
+                            fill: false,
+                            pointRadius: 5,
+                            pointHoverRadius: 7
+                        },
+                        {
+                            label: '시나리오 예측',
+                            data: new Array(currentPrediction.length - 1).fill(null).concat(futurePrediction),
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            borderWidth: 3,
+                            borderDash: [10, 5],
+                            fill: false,
+                            pointRadius: 5,
+                            pointHoverRadius: 7
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `GS차지비 시장점유율 시뮬레이션 (${data.additional_chargers.toLocaleString()}대 추가 설치)`,
+                            font: {
+                                size: 16,
+                                weight: 'bold'
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: '월'
+                            }
+                        },
+                        y: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: '시장점유율 (%)'
+                            },
+                            beginAtZero: false,
+                            min: Math.min(...predictionData, ...baselineData) - 0.5,
+                            max: Math.max(...predictionData, ...baselineData) + 0.5
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    }
+                }
+            });
         }
         
         // 페이지 로드 시 모달 시스템 초기화 (대시보드가 없을 때를 위해)
