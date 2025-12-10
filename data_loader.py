@@ -122,17 +122,35 @@ class ChargingDataLoader:
             return None, None, None
     
     def _safe_int(self, value):
-        """안전한 정수 변환"""
+        """안전한 정수 변환 - NaN, 빈 문자열, 잘못된 값을 모두 0으로 처리"""
         try:
-            if pd.isna(value):
+            # None이나 NaN 체크
+            if value is None or pd.isna(value):
                 return 0
-            # 문자열인 경우 숫자가 아니면 0 반환
+            
+            # 빈 문자열 체크
+            if isinstance(value, str) and value.strip() == '':
+                return 0
+            
+            # 문자열인 경우 정리 후 숫자 변환
             if isinstance(value, str):
-                # 숫자가 아닌 문자열이면 0 반환
-                if not value.replace(',', '').replace('-', '').replace('+', '').replace('.', '').isdigit():
+                # 쉼표, 공백 제거
+                cleaned = value.replace(',', '').replace(' ', '').strip()
+                
+                # 빈 문자열이면 0
+                if cleaned == '' or cleaned == '-' or cleaned == 'N/A':
                     return 0
+                
+                # 숫자로 변환 시도
+                try:
+                    return int(float(cleaned))
+                except (ValueError, TypeError):
+                    return 0
+            
+            # 숫자 타입인 경우 직접 변환
             return int(float(value))
-        except (ValueError, TypeError):
+            
+        except (ValueError, TypeError, AttributeError):
             return 0
     
     def extract_summary_data(self, s3_key):
@@ -252,6 +270,16 @@ class ChargingDataLoader:
         
         print(f'✅ 데이터 로드 완료: {len(df)} 행')
         print(f'📊 컬럼: {list(df.columns)}')
+        
+        # 충전소수 컬럼 디버깅
+        if '충전소수' in df.columns:
+            print(f'🔍 충전소수 컬럼 상태:')
+            print(f'   - 데이터 타입: {df["충전소수"].dtype}')
+            print(f'   - 결측값 개수: {df["충전소수"].isna().sum()}')
+            print(f'   - 상위 5개 값: {df["충전소수"].head().tolist()}')
+            print(f'   - 0이 아닌 값 개수: {(df["충전소수"] > 0).sum()}')
+        else:
+            print('⚠️ 충전소수 컬럼이 없습니다!')
         
         return df
     

@@ -3,6 +3,7 @@ Bedrock을 활용한 AI 분석 리포트 생성
 """
 import boto3
 import json
+import pandas as pd
 from config import Config
 
 class AIReportGenerator:
@@ -23,8 +24,6 @@ class AIReportGenerator:
     def retrieve_from_kb(self, query):
         """Knowledge Base에서 관련 정보 검색"""
         try:
-            print(f'🔍 Knowledge Base 검색 시작: "{query}"', flush=True)
-            
             response = self.kb_client.retrieve(
                 knowledgeBaseId=Config.KNOWLEDGE_BASE_ID,
                 retrievalQuery={'text': query},
@@ -36,41 +35,25 @@ class AIReportGenerator:
             )
             
             results = response.get('retrievalResults', [])
-            print(f'📊 검색 결과 개수: {len(results)}', flush=True)
             
             if len(results) == 0:
-                print('⚠️ Knowledge Base에서 검색 결과가 없습니다', flush=True)
                 return ''
             
-            # 각 결과의 메타데이터와 내용 로깅
-            for i, r in enumerate(results):
-                score = r.get('score', 0)
-                location = r.get('location', {})
-                s3_location = location.get('s3Location', {})
-                uri = s3_location.get('uri', 'N/A')
-                content_preview = r.get('content', {}).get('text', '')[:200]
-                print(f'  [{i+1}] Score: {score:.4f}, URI: {uri}', flush=True)
-                print(f'      Preview: {content_preview}...', flush=True)
-            
             context = '\n\n'.join([
-                f"[참고자료 {i+1}] (관련도: {r.get('score', 0):.2f})\n출처: {r.get('location', {}).get('s3Location', {}).get('uri', 'N/A')}\n\n{r.get('content', {}).get('text', '')}"
+                f"[참고자료 {i+1}]\n{r.get('content', {}).get('text', '')}"
                 for i, r in enumerate(results)
             ])
             
-            print(f'✅ Knowledge Base 컨텍스트 생성 완료 (총 {len(context)} 자)', flush=True)
             return context
         
         except Exception as e:
             print(f'❌ Knowledge Base 검색 오류: {e}', flush=True)
-            import traceback
-            traceback.print_exc()
             return ''
     
     def invoke_bedrock(self, prompt, context=''):
         """Bedrock 모델 호출 (리포트 생성용)"""
         import time
         try:
-            print(f'🔄 Bedrock 모델 호출 시작...', flush=True)
             start_time = time.time()
             
             system_prompt = f"{context}\n\n{prompt}" if context else prompt
@@ -98,13 +81,11 @@ class AIReportGenerator:
             result = response_body['content'][0]['text']
             
             elapsed_time = time.time() - start_time
-            print(f'✅ Bedrock 응답 완료 ({len(result)} 자, ⏱️ {elapsed_time:.2f}초)', flush=True)
+            print(f'✅ 리포트 생성 완료 (⏱️ {elapsed_time:.1f}초)', flush=True)
             return result
         
         except Exception as e:
             print(f'❌ Bedrock 호출 오류: {e}', flush=True)
-            import traceback
-            traceback.print_exc()
             return f"리포트 생성 중 오류가 발생했습니다: {str(e)}"
     
     def invoke_bedrock_for_query(self, structured_prompt):
@@ -472,37 +453,47 @@ GS차지비 {target_month} 현황:
             top10 = target_data.nlargest(10, '총충전기') if '총충전기' in target_data.columns else target_data.head(10)
             competitor_info = f"\n{target_month} 상위 10개 CPO:\n"
             for _, row in top10.iterrows():
-                competitor_info += f"- {row.get('CPO명', 'N/A')}: 순위 {row.get('순위', 'N/A')}위, 총충전기 {row.get('총충전기', 'N/A')}기, 시장점유율 {row.get('시장점유율', 'N/A')}, 총증감 {row.get('총증감', 'N/A')}\n"
+                cpo_name = row.get('CPO명', 'N/A')
+                rank = row.get('순위', 'N/A')
+                stations = row.get('충전소수')
+                total_chargers = row.get('총충전기')
+                market_share = row.get('시장점유율')
+                total_change = row.get('총증감')
+                
+                # NaN 처리
+                stations = int(stations) if pd.notna(stations) else 'N/A'
+                total_chargers = int(total_chargers) if pd.notna(total_chargers) else 'N/A'
+                market_share = f"{market_share:.1f}%" if pd.notna(market_share) else 'N/A'
+                total_change = f"{int(total_change):+d}" if pd.notna(total_change) else 'N/A'
+                
+                competitor_info += f"- {cpo_name}: 순위 {rank}위, 충전소 {stations}개, 총충전기 {total_chargers}기, 시장점유율 {market_share}, 총증감 {total_change}기\n"
         
         # 1. 경영진 요약 (GS차지비 관점)
-        print('📝 [1/3] GS차지비 경영진 요약 생성 중...', flush=True)
+        print('📝 [1/3] 경영진 요약 생성 중...', flush=True)
         start_time = time.time()
         report['executive_summary'] = self._generate_gs_executive_summary(
             target_month, gs_info, gs_trend, competitor_info, target_insights, available_months
         )
-        report['response_times']['executive_summary'] = round(time.time() - start_time, 2)
-        print(f'✅ [1/3] 경영진 요약 완료 (⏱️ {report["response_times"]["executive_summary"]}초)', flush=True)
+        report['response_times']['executive_summary'] = round(time.time() - start_time, 1)
         
         # 2. 경쟁 분석 (GS차지비 관점)
-        print('📝 [2/3] GS차지비 경쟁 분석 생성 중...', flush=True)
+        print('📝 [2/3] 경쟁 분석 생성 중...', flush=True)
         start_time = time.time()
         report['cpo_analysis'] = self._generate_gs_competitor_analysis(
             target_month, gs_info, gs_trend, competitor_info, target_insights, range_insights
         )
-        report['response_times']['cpo_analysis'] = round(time.time() - start_time, 2)
-        print(f'✅ [2/3] 경쟁 분석 완료 (⏱️ {report["response_times"]["cpo_analysis"]}초)', flush=True)
+        report['response_times']['cpo_analysis'] = round(time.time() - start_time, 1)
         
         # 3. 전략 제안 (GS차지비 관점)
-        print('📝 [3/3] GS차지비 전략 제안 생성 중...', flush=True)
+        print('📝 [3/3] 전략 제안 생성 중...', flush=True)
         start_time = time.time()
         report['trend_forecast'] = self._generate_gs_strategy(
             target_month, gs_info, gs_trend, competitor_info, range_insights, available_months
         )
-        report['response_times']['trend_forecast'] = round(time.time() - start_time, 2)
-        print(f'✅ [3/3] 전략 제안 완료 (⏱️ {report["response_times"]["trend_forecast"]}초)', flush=True)
+        report['response_times']['trend_forecast'] = round(time.time() - start_time, 1)
         
         total_time = sum(report['response_times'].values())
-        print(f'✅ GS차지비 AI 리포트 생성 완료 (총 ⏱️ {total_time:.2f}초)\n', flush=True)
+        print(f'✅ GS차지비 AI 리포트 생성 완료 (총 ⏱️ {total_time:.1f}초)\n', flush=True)
         return report
     
     def _generate_gs_executive_summary(self, target_month, gs_info, gs_trend, competitor_info, insights, available_months):
@@ -667,8 +658,54 @@ GS차지비 {target_month} 현황:
         if 'CPO명' in target_data.columns and '총충전기' in target_data.columns:
             top10 = target_data.nlargest(10, '총충전기')
             top10_info = f"\n{target_month} 상위 10개 CPO:\n"
+            
+            # 간단한 상태 확인
+            print(f'🔍 상위 10개 CPO 데이터: {len(top10)}개 준비완료')
+            
             for idx, row in top10.iterrows():
-                top10_info += f"- {row.get('순위', 'N/A')}위. {row.get('CPO명', 'N/A')}: 총충전기 {row.get('총충전기', 'N/A')}기 (완속 {row.get('완속충전기', 'N/A')}, 급속 {row.get('급속충전기', 'N/A')}), 점유율 {row.get('시장점유율', 'N/A')}, 전월 대비 {row.get('총증감', 'N/A')}기\n"
+                # 안전한 데이터 추출
+                rank = row.get('순위', 'N/A')
+                cpo_name = row.get('CPO명', 'N/A')
+                stations = row.get('충전소수')
+                total_chargers = row.get('총충전기')
+                slow_chargers = row.get('완속충전기')
+                fast_chargers = row.get('급속충전기')
+                market_share = row.get('시장점유율')
+                total_change = row.get('총증감')
+                
+                # 강화된 NaN 처리 - 절대 'N/A'나 '-'를 반환하지 않음
+                def safe_convert_int(val):
+                    try:
+                        if pd.isna(val) or val is None:
+                            return 0
+                        if isinstance(val, str) and (val.strip() == '' or val.strip() == '-'):
+                            return 0
+                        return int(float(val))
+                    except (ValueError, TypeError):
+                        return 0
+                
+                def safe_convert_float(val):
+                    try:
+                        if pd.isna(val) or val is None:
+                            return 0.0
+                        if isinstance(val, str) and (val.strip() == '' or val.strip() == '-'):
+                            return 0.0
+                        return float(val)
+                    except (ValueError, TypeError):
+                        return 0.0
+                
+                stations = safe_convert_int(stations)
+                total_chargers = safe_convert_int(total_chargers)
+                slow_chargers = safe_convert_int(slow_chargers)
+                fast_chargers = safe_convert_int(fast_chargers)
+                market_share_val = safe_convert_float(market_share)
+                total_change_val = safe_convert_int(total_change)
+                
+                # 포맷팅
+                market_share_str = f"{market_share_val:.1f}%"
+                total_change_str = f"{total_change_val:+d}" if total_change_val != 0 else "0"
+                
+                top10_info += f"- {rank}위. {cpo_name}: 충전소 {stations:,}개, 총충전기 {total_chargers:,}기 (완속 {slow_chargers:,}, 급속 {fast_chargers:,}), 점유율 {market_share_str}, 전월 대비 {total_change_str}기\n"
         
         # 전체 시장 요약
         summary = target_insights.get('summary', {})
@@ -1053,10 +1090,56 @@ GS차지비 {target_month} 상세:
         gs_trend = ""
         if 'CPO명' in range_data.columns:
             gs_monthly = range_data[range_data['CPO명'] == 'GS차지비'].sort_values('snapshot_month')
+            print(f'🔍 GS차지비 월별 데이터: {len(gs_monthly)}개월 준비완료')
+            
             if len(gs_monthly) > 0:
                 gs_trend = "\nGS차지비 월별 추이:\n"
                 for _, row in gs_monthly.iterrows():
-                    gs_trend += f"- {row.get('snapshot_month', 'N/A')}: 순위 {row.get('순위', 'N/A')}위, 총충전기 {row.get('총충전기', 'N/A')}기, 점유율 {row.get('시장점유율', 'N/A')}\n"
+                    # 안전한 데이터 추출
+                    month = row.get('snapshot_month', 'N/A')
+                    rank = row.get('순위', 'N/A')
+                    stations = row.get('충전소수')
+                    slow_chargers = row.get('완속충전기')
+                    fast_chargers = row.get('급속충전기')
+                    total_chargers = row.get('총충전기')
+                    market_share = row.get('시장점유율')
+                    
+                    # 강화된 데이터 변환 함수
+                    def safe_convert_int(val):
+                        try:
+                            if pd.isna(val) or val is None:
+                                return 0
+                            if isinstance(val, str) and (val.strip() == '' or val.strip() == '-' or val.strip().lower() == 'n/a'):
+                                return 0
+                            return int(float(val))
+                        except (ValueError, TypeError):
+                            return 0
+                    
+                    def safe_convert_float(val):
+                        try:
+                            if pd.isna(val) or val is None:
+                                return 0.0
+                            if isinstance(val, str) and (val.strip() == '' or val.strip() == '-' or val.strip().lower() == 'n/a'):
+                                return 0.0
+                            return float(val)
+                        except (ValueError, TypeError):
+                            return 0.0
+                    
+                    # 안전한 변환 적용
+                    stations = safe_convert_int(stations)
+                    slow_chargers = safe_convert_int(slow_chargers)
+                    fast_chargers = safe_convert_int(fast_chargers)
+                    total_chargers = safe_convert_int(total_chargers)
+                    market_share_val = safe_convert_float(market_share)
+                    market_share = f"{market_share_val:.1f}%"
+                    
+                    gs_trend += f"- {month}: 순위 {rank}위, 충전소 {stations}개, 완속충전기 {slow_chargers}기, 급속충전기 {fast_chargers}기, 총충전기 {total_chargers}기, 점유율 {market_share}\n"
+            else:
+                print('⚠️ GS차지비 데이터를 찾을 수 없습니다!')
+                # CPO명 목록 확인
+                if 'CPO명' in range_data.columns:
+                    unique_cpos = range_data['CPO명'].unique()
+                    print(f'   - 사용 가능한 CPO명: {list(unique_cpos)[:10]}...')  # 처음 10개만 표시
         
         # 상위 10개 CPO 월별 추이
         top10_trend = ""
@@ -1194,7 +1277,35 @@ GS차지비 {target_month} 상세:
 > 💡 콜아웃
 
 ## 2.1 Monthly Performance
-- GS차지비 월별 충전기/충전소 수 표
+### 2.1.1 GS차지비 Infrastructure Status
+
+**중요: 아래 표를 정확히 작성하세요. 모든 데이터는 위에 제공된 "GS차지비 월별 추이" 데이터에서 가져와야 합니다.**
+
+| Month | Charging Stations | AC (완속) | DC (급속) | Total Chargers | Market Share | Rank |
+|-------|------------------|-----------|-----------|----------------|--------------|------|
+| 각 월별로 위 데이터에서 정확한 수치 입력 |
+
+**데이터 입력 규칙:**
+- Charging Stations: 충전소 수 (위 데이터의 "충전소 X개"에서 추출)
+- AC (완속): 완속충전기 수 (위 데이터의 "완속충전기 X기"에서 추출)  
+- DC (급속): 급속충전기 수 (위 데이터의 "급속충전기 X기"에서 추출)
+- Total Chargers: 총충전기 수 (위 데이터의 "총충전기 X기"에서 추출)
+- Market Share: 시장점유율 (위 데이터의 "점유율 X%"에서 추출)
+- Rank: 순위 (위 데이터의 "순위 X위"에서 추출)
+
+**⚠️⚠️⚠️ 중요: 데이터 표시 규칙 ⚠️⚠️⚠️**
+
+1. **절대 "-", "N/A", "데이터 없음"을 표에 사용하지 마세요**
+2. **위에 제공된 실제 숫자 데이터만 사용하세요**
+3. **데이터가 0인 경우 "0"으로 표시하세요**
+4. **모든 숫자는 쉼표로 구분하세요 (예: 1,234)**
+
+**예시:**
+위 데이터에 "- 2025-11: 순위 2위, 충전소 1234개, 완속충전기 5678기, 급속충전기 2345기, 총충전기 8023기, 점유율 15.2%"가 있다면:
+| 2025-11 | 1,234 | 5,678 | 2,345 | 8,023 | 15.2% | 2 |
+
+**데이터 추출 실패 시에도 "0"으로 표시하고, 절대 "-"나 "N/A"를 사용하지 마세요.**
+
 - 점유율 변화 추이
 
 ## 2.2 Growth Comparison

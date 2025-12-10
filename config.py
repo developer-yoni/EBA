@@ -18,12 +18,12 @@ class Config:
     # Bedrock 설정
     MODEL_ID = os.getenv('MODEL_ID', 'global.anthropic.claude-sonnet-4-5-20250929-v1:0')
     ANTHROPIC_VERSION = 'bedrock-2023-05-31'
-    MAX_TOKENS = 8192
+    MAX_TOKENS = 5120  # 성능 최적화: 6144 → 5120
     TEMPERATURE = 0.7
     
     # Knowledge Base 설정
     KNOWLEDGE_BASE_ID = os.getenv('KNOWLEDGE_BASE_ID', 'XHG5MMFIYK')
-    KB_NUMBER_OF_RESULTS = 5
+    KB_NUMBER_OF_RESULTS = 2  # 성능 최적화: 3 → 2
     
     # 데이터 설정
     HEADER_ROW = 4  # 0-based index (4번째 행이 헤더)
