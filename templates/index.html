@@ -1635,8 +1635,8 @@
             <div class="card" style="margin-bottom: 20px;">
                 <h3>🎯 AI Scenario Simulator</h3>
                 <p style="color: #718096; margin-bottom: 20px;">
-                    RAG에 쌓인 과거 월별 CPO 데이터를 기반으로 AWS Bedrock 모델을 호출해 미래 시장점유율을 시뮬레이션합니다.
-                    <strong>백테스트 검증을 통해 신뢰도 있는 범위 내에서만 예측합니다.</strong>
+                    <strong>Ridge Regression(α=10) 기반 ML 예측:</strong> GS충전기/시장전체를 각각 예측 후 점유율 계산 (Ratio 방식)
+                    <br><span style="font-size: 12px; color: #a0aec0;">Bedrock은 예측 결과에 대한 인사이트 생성에만 활용됩니다. 백테스트 검증 완료 (MAPE &lt; 2%)</span>
                 </p>
                 
                 <!-- 신뢰도 기반 예측 범위 안내 -->
@@ -1760,11 +1760,9 @@
                                 <input type="range" id="targetShareSlider" min="14" max="21" step="0.1" value="17" 
                                        style="width: 100%; margin-bottom: 8px;" oninput="updateTargetShare()">
                                 <div id="targetShareLabels" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 0 2px;">
-                                    <span>14%</span>
+                                    <span>14.0%</span>
                                     <span>17.5%</span>
-                                    <span>21%</span>
-                                    <span>20%</span>
-                                    <span>25%</span>
+                                    <span>21.0%</span>
                                 </div>
                                 <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
                                     * 예측 기간 종료 시점에 달성하고자 하는 목표 점유율
@@ -1779,7 +1777,7 @@
                         </div>
                         
                         <button class="btn" onclick="runSimulation()" id="runSimBtn" style="width: 100%; margin-top: 8px;">
-                            🤖 AI 예측 실행
+                            📊 ML 예측 실행
                         </button>
                     </div>
                 </div>
@@ -1788,12 +1786,12 @@
             <!-- 시뮬레이터 1 결과 (충전기 → 점유율) -->
             <div id="simulationResults1" class="hidden">
                 <div class="card" style="margin-bottom: 20px;">
-                    <h3>🤖 AI 예측 결과 (충전기 → 점유율)</h3>
+                    <h3>📊 ML 예측 결과 (충전기 → 점유율)</h3>
                     <div id="simulationSummary1" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;"></div>
                 </div>
                 
                 <div class="card" style="margin-bottom: 20px;">
-                    <h3>📈 AI 기반 GS차지비 시장점유율 예측</h3>
+                    <h3>📈 Ridge Regression 기반 시장점유율 예측</h3>
                     <div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
                         <div style="display: flex; align-items: center; gap: 6px;">
                             <div style="width: 24px; height: 3px; background: #48bb78;"></div>
@@ -1814,7 +1812,7 @@
                 </div>
                 
                 <div id="aiInsightsSection1" class="card" style="display: none;">
-                    <h3>🔮 AI 미래 예측 인사이트</h3>
+                    <h3>🔮 Bedrock 기반 인사이트</h3>
                     <div id="aiInsightsContent1"></div>
                 </div>
             </div>
@@ -1822,7 +1820,7 @@
             <!-- 시뮬레이터 2 결과 (점유율 → 충전기) -->
             <div id="simulationResults2" class="hidden">
                 <div class="card" style="margin-bottom: 20px;">
-                    <h3>🎯 AI 분석 결과 (목표 점유율 → 필요 충전기)</h3>
+                    <h3>🎯 ML 분석 결과 (목표 점유율 → 필요 충전기)</h3>
                     <div id="simulationSummary2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;"></div>
                 </div>
                 
@@ -4328,7 +4326,7 @@
                     runBtn.disabled = true;
                     runBtn.style.opacity = '0.8';
                 } else {
-                    runBtn.innerHTML = '🤖 AI 예측 실행';
+                    runBtn.innerHTML = '📊 ML 예측 실행';
                     runBtn.disabled = false;
                     runBtn.style.opacity = '1';
                 }
@@ -4469,7 +4467,7 @@
             summaryDiv.innerHTML = `
                 <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
                     <div class="loading-spinner" style="margin: 0 auto 16px;"></div>
-                    <p style="color: var(--text-secondary);">🤖 AI가 RAG 데이터를 분석하여 ${mode === 'charger_to_share' ? '미래를 예측' : '필요 충전기를 계산'}하고 있습니다...</p>
+                    <p style="color: var(--text-secondary);">📊 Ridge Regression 기반 ML 모델이 ${mode === 'charger_to_share' ? '미래를 예측' : '필요 충전기를 계산'}하고 있습니다...</p>
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
                         ${loadingMessage}
                     </p>
@@ -4511,7 +4509,7 @@
                 // 로딩 상태 해제
                 if (isMode1) {
                     simLoadingState.mode1 = false;
-                    btn.innerHTML = '🤖 AI 예측 실행';
+                    btn.innerHTML = '📊 ML 예측 실행';
                 } else {
                     simLoadingState.mode2 = false;
                     btn.innerHTML = '🎯 필요 충전기 계산';
@@ -4968,7 +4966,7 @@
                 <div style="margin-top: 24px; padding: 16px; background: var(--bg-surface); border-radius: 8px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                         <div>
-                            <span style="font-size: 12px; color: var(--text-muted);">AI 예측 신뢰도:</span>
+                            <span style="font-size: 12px; color: var(--text-muted);">ML 예측 신뢰도:</span>
                             <span style="font-weight: var(--fw-bold); margin-left: 8px; padding: 4px 12px; border-radius: 4px; font-size: 12px;
                                 background: ${confidence.level === 'HIGH' ? 'rgba(16, 185, 129, 0.1)' : confidence.level === 'MEDIUM' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)'};
                                 color: ${confidence.level === 'HIGH' ? 'var(--success)' : confidence.level === 'MEDIUM' ? 'var(--warning)' : 'var(--error)'};">
@@ -5194,7 +5192,7 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: `AI 기반 GS차지비 시장점유율 예측`,
+                            text: `Ridge Regression 기반 시장점유율 예측`,
                             font: {
                                 size: 16,
                                 weight: 'bold'
