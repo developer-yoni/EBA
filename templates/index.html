@@ -1734,11 +1734,11 @@
                                     추가 설치 충전기 수: <span id="chargerCountDisplay" style="color: var(--brand-primary); font-weight: var(--fw-bold);">0대</span>
                                 </label>
                                 <input type="range" id="chargerSlider" min="0" max="5000" step="100" value="0" 
-                                       style="width: 100%; margin-bottom: 8px;" oninput="updateChargerCount()">
-                                <div id="chargerSliderLabels" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 0 2px;">
-                                    <span>0</span>
-                                    <span>2,500</span>
-                                    <span>5,000</span>
+                                       style="width: 100%; margin-bottom: 4px;" oninput="updateChargerCount()">
+                                <div id="chargerSliderLabels" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); width: calc(100% - 8px); margin: 0 4px;">
+                                    <span style="text-align: left; flex: 0 0 auto;">0</span>
+                                    <span style="text-align: center; flex: 1;">2,500</span>
+                                    <span style="text-align: right; flex: 0 0 auto;">5,000</span>
                                 </div>
                                 <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
                                     * 예측 기간 동안 총 설치할 충전기 수 (균등 분배)
@@ -4215,9 +4215,9 @@
                         if (chargerLabels) {
                             const midValue = Math.round(chargerRange.max / 2);
                             chargerLabels.innerHTML = `
-                                <span>0</span>
-                                <span>${midValue.toLocaleString()}</span>
-                                <span>${chargerRange.max.toLocaleString()}</span>
+                                <span style="text-align: left; flex: 0 0 auto;">0</span>
+                                <span style="text-align: center; flex: 1;">${midValue.toLocaleString()}</span>
+                                <span style="text-align: right; flex: 0 0 auto;">${chargerRange.max.toLocaleString()}</span>
                             `;
                         }
                         
