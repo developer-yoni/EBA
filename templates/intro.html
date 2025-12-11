@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GS Insight STUDIO</title>
+    <title>GS INSIGHT STUDIO</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
@@ -80,6 +80,97 @@
         .enter-btn.visible { opacity: 1; }
         .enter-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 40px rgba(255, 215, 0, 0.6); }
 
+        /* 페이지 전환 효과 */
+        .page-transition-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #050508;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+        }
+        .page-transition-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .transition-logo {
+            font-size: clamp(40px, 8vw, 80px);
+            font-weight: 900;
+            color: #fff;
+            margin-bottom: 30px;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        .transition-logo.animate {
+            animation: logoFadeIn 0.6s ease forwards;
+        }
+        @keyframes logoFadeIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .transition-loader {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            opacity: 0;
+        }
+        .transition-loader.animate {
+            animation: loaderFadeIn 0.4s ease 0.3s forwards;
+        }
+        @keyframes loaderFadeIn {
+            to { opacity: 1; }
+        }
+        .transition-spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(255, 215, 0, 0.2);
+            border-top-color: #FFD700;
+            border-radius: 50%;
+            animation: transitionSpin 0.8s linear infinite;
+        }
+        @keyframes transitionSpin {
+            to { transform: rotate(360deg); }
+        }
+        .transition-text {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: 500;
+        }
+        .transition-progress {
+            width: 200px;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            margin-top: 20px;
+            overflow: hidden;
+            opacity: 0;
+        }
+        .transition-progress.animate {
+            animation: loaderFadeIn 0.4s ease 0.5s forwards;
+        }
+        .transition-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #FFD700, #FFA500);
+            width: 0%;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+        
+        /* 페이지 나가기 애니메이션 */
+        body.page-exit {
+            animation: pageExit 0.5s ease forwards;
+        }
+        @keyframes pageExit {
+            to { opacity: 0; transform: scale(0.98); }
+        }
+
         .loading { display: flex; justify-content: center; align-items: center; height: 200px; color: rgba(255, 255, 255, 0.6); }
         .loading-spinner { width: 40px; height: 40px; border: 3px solid rgba(255, 255, 255, 0.1); border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 15px; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -93,7 +184,7 @@
     <section id="main-hero">
         <canvas id="hero-canvas"></canvas>
         <div class="hero-typography">
-            <span class="char-g">G</span><span class="char-s1">S</span><span class="hidden-text">S Insight </span><span class="studio-group"><span class="char-s2">S</span><span class="text-tudio">TUDIO</span></span>
+            <span class="char-g">G</span><span class="char-s1">S</span><span class="hidden-text"> INSIGHT </span><span class="studio-group"><span class="char-s2">S</span><span class="text-tudio">TUDIO</span></span>
         </div>
         <a href="#scene-authority" class="hero-enter-btn" id="heroEnterBtn">Explore Data ↓</a>
     </section>
@@ -154,7 +245,19 @@
         </div>
     </section>
 
-    <a href="/dashboard" class="enter-btn" id="enterBtn">Enter Studio →</a>
+    <button class="enter-btn" id="enterBtn" onclick="navigateToDashboard()">Enter Studio →</button>
+    
+    <!-- 페이지 전환 오버레이 -->
+    <div class="page-transition-overlay" id="pageTransition">
+        <div class="transition-logo" id="transitionLogo">GS INSIGHT STUDIO</div>
+        <div class="transition-loader" id="transitionLoader">
+            <div class="transition-spinner"></div>
+            <span class="transition-text">대시보드 준비 중...</span>
+        </div>
+        <div class="transition-progress" id="transitionProgress">
+            <div class="transition-progress-bar" id="transitionProgressBar"></div>
+        </div>
+    </div>
 
     <script>
         gsap.registerPlugin(ScrollTrigger);
@@ -184,7 +287,7 @@
             }, 60);
         }
 
-        // 타이포그래피 애니메이션: GS → G STUDIO → GS Insight STUDIO
+        // 타이포그래피 애니메이션: GS → G STUDIO → GS INSIGHT STUDIO
         function initHeroTypographyAnimation() {
             const tl = gsap.timeline({ delay: 0.5 });
             // 1단계: S 사라지고 STUDIO 나타남
@@ -193,7 +296,7 @@
             tl.to('.text-tudio', { opacity: 1, maxWidth: '5em', duration: 0.8 }, 0.3);
             // 2단계: STUDIO 오른쪽으로 이동
             tl.to('.studio-group', { x: 10, duration: 1 }, 1.2);
-            // 3단계: "S Insight " 나타남
+            // 3단계: " INSIGHT " 나타남
             tl.to('.hidden-text', { opacity: 1, maxWidth: '8em', duration: 1.2 }, 1.8);
             // 4단계: 버튼 표시
             tl.to('#heroEnterBtn', { opacity: 1, duration: 0.6, onComplete: () => document.getElementById('heroEnterBtn').classList.add('visible') }, 3.2);
@@ -573,6 +676,54 @@
             container.innerHTML = html;
         }
 
+        // 페이지 전환 함수
+        function navigateToDashboard() {
+            const overlay = document.getElementById('pageTransition');
+            const logo = document.getElementById('transitionLogo');
+            const loader = document.getElementById('transitionLoader');
+            const progress = document.getElementById('transitionProgress');
+            const progressBar = document.getElementById('transitionProgressBar');
+            
+            // 오버레이 활성화
+            overlay.classList.add('active');
+            
+            // 순차적 애니메이션
+            setTimeout(() => logo.classList.add('animate'), 100);
+            setTimeout(() => loader.classList.add('animate'), 300);
+            setTimeout(() => progress.classList.add('animate'), 500);
+            
+            // 프로그레스 바 애니메이션
+            let progressValue = 0;
+            const progressInterval = setInterval(() => {
+                progressValue += Math.random() * 15 + 5;
+                if (progressValue > 90) progressValue = 90;
+                progressBar.style.width = progressValue + '%';
+            }, 150);
+            
+            // 페이지 전환 (데이터가 이미 로드되어 있으면 빠르게, 아니면 약간 대기)
+            const transitionDelay = dataLoaded ? 800 : 1200;
+            
+            setTimeout(() => {
+                clearInterval(progressInterval);
+                progressBar.style.width = '100%';
+                
+                // 페이지 이동
+                setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 300);
+            }, transitionDelay);
+        }
+        
+        // Hero 버튼도 같은 효과 적용
+        function setupHeroButton() {
+            const heroBtn = document.getElementById('heroEnterBtn');
+            if (heroBtn) {
+                heroBtn.addEventListener('click', (e) => {
+                    // 스크롤 다운은 기본 동작 유지 (앵커 링크)
+                });
+            }
+        }
+
         // 초기화
         window.addEventListener('load', () => {
             initHeroCanvas();
@@ -580,6 +731,7 @@
             initScaleCanvas();
             initInsightCanvas();
             runIntroAnimation();
+            setupHeroButton();
         });
         window.addEventListener('resize', () => ScrollTrigger.refresh());
     </script>

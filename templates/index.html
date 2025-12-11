@@ -89,6 +89,42 @@
             background-image: 
                 radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
                 radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%);
+            opacity: 0;
+            animation: pageEnter 0.6s ease 0.1s forwards;
+        }
+        
+        @keyframes pageEnter {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* 컨테이너 순차 애니메이션 */
+        .container > * {
+            opacity: 0;
+            animation: elementFadeIn 0.5s ease forwards;
+        }
+        .container > *:nth-child(1) { animation-delay: 0.2s; }
+        .container > *:nth-child(2) { animation-delay: 0.3s; }
+        .container > *:nth-child(3) { animation-delay: 0.4s; }
+        .container > *:nth-child(4) { animation-delay: 0.5s; }
+        .container > *:nth-child(5) { animation-delay: 0.6s; }
+        .container > *:nth-child(n+6) { animation-delay: 0.7s; }
+        
+        @keyframes elementFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         /* ========================================
@@ -743,6 +779,39 @@
         
         .hidden {
             display: none;
+        }
+        
+        /* 시뮬레이터 모드 탭 스타일 */
+        .sim-mode-tab {
+            padding: 12px 24px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 14px;
+            font-weight: var(--fw-medium);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+        }
+        
+        .sim-mode-tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-surface);
+        }
+        
+        .sim-mode-tab.active {
+            color: var(--brand-primary);
+            border-bottom-color: var(--brand-primary);
+            background: rgba(59, 130, 246, 0.05);
+        }
+        
+        .sim-mode-tab:first-child {
+            border-radius: 8px 0 0 0;
+        }
+        
+        .sim-mode-tab:last-child {
+            border-radius: 0 8px 0 0;
         }
         
         /* ========================================
@@ -1564,10 +1633,57 @@
         <!-- 시뮬레이션 탭 -->
         <div id="simulationTab" class="tab-content">
             <div class="card" style="margin-bottom: 20px;">
-                <h3>🎯 Scenario Simulator</h3>
+                <h3>🎯 AI Scenario Simulator</h3>
                 <p style="color: #718096; margin-bottom: 20px;">
-                    GS차지비의 충전기 추가 설치 시나리오를 시뮬레이션하여 미래 시장점유율을 예측합니다.
+                    RAG에 쌓인 과거 월별 CPO 데이터를 기반으로 AWS Bedrock 모델을 호출해 미래 시장점유율을 시뮬레이션합니다.
+                    <strong>백테스트 검증을 통해 신뢰도 있는 범위 내에서만 예측합니다.</strong>
                 </p>
+                
+                <!-- 신뢰도 기반 예측 범위 안내 -->
+                <div id="reliabilityInfo" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); padding: 16px 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <span style="font-size: 20px;">🔬</span>
+                        <div>
+                            <div style="font-weight: var(--fw-semibold); color: var(--text-primary);">신뢰도 기반 예측 범위</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">백테스트 결과 기반, MAPE 2% 이하 & MAE 0.3%p 이하 기준</div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+                        <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">기준 시점</div>
+                            <div style="font-size: 16px; font-weight: var(--fw-bold); color: var(--brand-primary);" id="reliabilityBaseMonth">-</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">RAG 최신 데이터</div>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">최대 예측 기간</div>
+                            <div style="font-size: 16px; font-weight: var(--fw-bold); color: var(--success);" id="reliabilityMaxPeriod">-</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">신뢰도 검증 완료</div>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">예측 종료 시점</div>
+                            <div style="font-size: 16px; font-weight: var(--fw-bold); color: var(--warning);" id="reliabilityEndMonth">-</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">최대 예측 가능</div>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">현재 GS차지비 점유율</div>
+                            <div style="font-size: 16px; font-weight: var(--fw-bold); color: var(--brand-secondary);" id="reliabilityCurrentShare">-</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">기준 시점 기준</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 시뮬레이션 모드 선택 (탭 형태) -->
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; border-bottom: 2px solid var(--border-primary);">
+                        <button type="button" class="sim-mode-tab active" id="mode1Tab" onclick="switchSimMode('charger_to_share')">
+                            📊 충전기 → 점유율 예측
+                        </button>
+                        <button type="button" class="sim-mode-tab" id="mode2Tab" onclick="switchSimMode('share_to_charger')">
+                            🎯 목표 점유율 → 필요 충전기
+                        </button>
+                    </div>
+                    <input type="hidden" name="simMode" id="simModeValue" value="charger_to_share">
+                </div>
                 
                 <!-- 시뮬레이션 설정 -->
                 <div class="simulation-controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
@@ -1577,63 +1693,167 @@
                         
                         <div style="margin-bottom: 16px;">
                             <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">기준월:</label>
-                            <select id="simBaseMonth" class="month-select" style="width: 100%;">
-                                <option value="">선택하세요</option>
-                            </select>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="text" id="simBaseMonth" class="month-select" style="width: 100%; background: var(--bg-surface); cursor: not-allowed;" readonly>
+                                <span style="font-size: 20px;" title="RAG 최신 데이터로 고정">🔒</span>
+                            </div>
+                            <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                                * 신뢰도 확보를 위해 RAG 최신 데이터로 고정됩니다
+                            </p>
                         </div>
                         
                         <div style="margin-bottom: 16px;">
-                            <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">시뮬레이션 기간:</label>
+                            <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">예측 기간:</label>
                             <select id="simMonths" class="month-select" style="width: 100%;">
-                                <option value="6">6개월</option>
-                                <option value="12" selected>12개월</option>
-                                <option value="18">18개월</option>
-                                <option value="24">24개월</option>
+                                <option value="1">1개월</option>
+                                <option value="2">2개월</option>
+                                <option value="3">3개월</option>
+                                <option value="4">4개월</option>
+                                <option value="5">5개월</option>
+                                <option value="6" selected>6개월</option>
                             </select>
+                            <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                                * 백테스트 검증된 신뢰도 있는 기간만 선택 가능
+                            </p>
+                            <!-- 선택된 기간의 오차 정보 표시 -->
+                            <div id="periodAccuracyInfo" style="margin-top: 8px; padding: 8px 12px; background: rgba(16, 185, 129, 0.1); border-radius: 6px; font-size: 11px; display: none;">
+                                <span style="color: var(--success);">✓</span> 
+                                <span id="periodAccuracyText">예상 오차: MAPE 0.76%, MAE 0.13%p</span>
+                            </div>
                         </div>
                     </div>
                     
-                    <!-- 우측: 시나리오 설정 -->
+                    <!-- 우측: 시나리오 설정 (모드에 따라 변경) -->
                     <div class="control-section">
                         <h4 style="margin-bottom: 16px; color: var(--text-primary);">⚡ 시나리오 설정</h4>
                         
-                        <div style="margin-bottom: 16px;">
-                            <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">
-                                추가 설치 충전기 수: <span id="chargerCountDisplay" style="color: var(--brand-primary); font-weight: var(--fw-bold);">0대</span>
-                            </label>
-                            <input type="range" id="chargerSlider" min="0" max="5000" step="100" value="0" 
-                                   style="width: 100%; margin-bottom: 8px;" oninput="updateChargerCount()">
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted);">
-                                <span>0대</span>
-                                <span>2,500대</span>
-                                <span>5,000대</span>
+                        <!-- 모드 1: 충전기 → 점유율 -->
+                        <div id="mode1Inputs">
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">
+                                    추가 설치 충전기 수: <span id="chargerCountDisplay" style="color: var(--brand-primary); font-weight: var(--fw-bold);">0대</span>
+                                </label>
+                                <input type="range" id="chargerSlider" min="0" max="5000" step="100" value="0" 
+                                       style="width: 100%; margin-bottom: 8px;" oninput="updateChargerCount()">
+                                <div id="chargerSliderLabels" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 0 2px;">
+                                    <span>0</span>
+                                    <span>2,500</span>
+                                    <span>5,000</span>
+                                </div>
+                                <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                                    * 예측 기간 동안 총 설치할 충전기 수 (균등 분배)
+                                </p>
+                                <!-- 월평균 증가량 참고 정보 -->
+                                <div id="chargerAvgInfo" style="margin-top: 8px; padding: 8px 12px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; font-size: 11px; display: none;">
+                                    <span style="color: var(--brand-primary);">📊</span> 
+                                    <span id="chargerAvgText">과거 월평균 증가량: -</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 모드 2: 목표 점유율 → 필요 충전기 -->
+                        <div id="mode2Inputs" style="display: none;">
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">
+                                    목표 시장점유율: <span id="targetShareDisplay" style="color: var(--warning); font-weight: var(--fw-bold);">17.0%</span>
+                                </label>
+                                <input type="range" id="targetShareSlider" min="14" max="21" step="0.1" value="17" 
+                                       style="width: 100%; margin-bottom: 8px;" oninput="updateTargetShare()">
+                                <div id="targetShareLabels" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 0 2px;">
+                                    <span>14%</span>
+                                    <span>17.5%</span>
+                                    <span>21%</span>
+                                    <span>20%</span>
+                                    <span>25%</span>
+                                </div>
+                                <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                                    * 예측 기간 종료 시점에 달성하고자 하는 목표 점유율
+                                </p>
+                            </div>
+                            
+                            <!-- 현재 점유율 참고 정보 -->
+                            <div id="currentShareInfo" style="padding: 12px; background: rgba(72, 187, 120, 0.1); border-radius: 6px; margin-bottom: 16px;">
+                                <div style="font-size: 12px; color: var(--text-muted);">현재 GS차지비 점유율 (기준월)</div>
+                                <div style="font-size: 18px; font-weight: var(--fw-bold); color: var(--success);" id="currentShareValue">-</div>
                             </div>
                         </div>
                         
                         <button class="btn" onclick="runSimulation()" id="runSimBtn" style="width: 100%; margin-top: 8px;">
-                            🚀 시뮬레이션 실행
+                            🤖 AI 예측 실행
                         </button>
                     </div>
                 </div>
             </div>
             
-            <!-- 시뮬레이션 결과 -->
-            <div id="simulationResults" class="hidden">
-                <!-- 현재 상황 vs 예측 결과 -->
+            <!-- 시뮬레이터 1 결과 (충전기 → 점유율) -->
+            <div id="simulationResults1" class="hidden">
                 <div class="card" style="margin-bottom: 20px;">
-                    <h3>📊 시뮬레이션 결과</h3>
-                    <div id="simulationSummary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;"></div>
+                    <h3>🤖 AI 예측 결과 (충전기 → 점유율)</h3>
+                    <div id="simulationSummary1" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;"></div>
                 </div>
                 
-                <!-- 인터랙티브 차트 -->
-                <div class="card">
-                    <h3>📈 시장점유율 예측 차트</h3>
-                    <p style="color: var(--text-secondary); margin-bottom: 16px;">
-                        파란선: 현재 성장률 유지 시나리오 | 주황선: 추가 충전기 설치 시나리오
-                    </p>
-                    <div style="height: 350px; max-height: 350px;">
-                        <canvas id="simulationChart"></canvas>
+                <div class="card" style="margin-bottom: 20px;">
+                    <h3>📈 AI 기반 GS차지비 시장점유율 예측</h3>
+                    <div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div style="width: 24px; height: 3px; background: #48bb78;"></div>
+                            <span style="font-size: 12px; color: var(--text-secondary);">실제값 (실선)</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div style="width: 24px; height: 3px; background: #4299e1; border-style: dashed;"></div>
+                            <span style="font-size: 12px; color: var(--text-secondary);">현재 추세 기준 예측 (점선)</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div style="width: 24px; height: 3px; background: #ed8936; border-style: dashed;"></div>
+                            <span style="font-size: 12px; color: var(--text-secondary);">추가 설치 시나리오 예측 (점선)</span>
+                        </div>
                     </div>
+                    <div style="height: 400px; max-height: 400px;">
+                        <canvas id="simulationChart1"></canvas>
+                    </div>
+                </div>
+                
+                <div id="aiInsightsSection1" class="card" style="display: none;">
+                    <h3>🔮 AI 미래 예측 인사이트</h3>
+                    <div id="aiInsightsContent1"></div>
+                </div>
+            </div>
+            
+            <!-- 시뮬레이터 2 결과 (점유율 → 충전기) -->
+            <div id="simulationResults2" class="hidden">
+                <div class="card" style="margin-bottom: 20px;">
+                    <h3>🎯 AI 분석 결과 (목표 점유율 → 필요 충전기)</h3>
+                    <div id="simulationSummary2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;"></div>
+                </div>
+                
+                <div class="card" style="margin-bottom: 20px;">
+                    <h3>📈 목표 점유율 달성 시나리오</h3>
+                    <div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div style="width: 24px; height: 3px; background: #48bb78;"></div>
+                            <span style="font-size: 12px; color: var(--text-secondary);">학습용 실제값</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div style="width: 24px; height: 3px; background: #f59e0b; border-style: dashed;"></div>
+                            <span style="font-size: 12px; color: var(--text-secondary);">목표 점유율</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div style="width: 24px; height: 3px; background: #4299e1; border-style: dashed;"></div>
+                            <span style="font-size: 12px; color: var(--text-secondary);">현재 추세 유지</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div style="width: 24px; height: 3px; background: #ed8936; border-style: dashed;"></div>
+                            <span style="font-size: 12px; color: var(--text-secondary);">목표 달성 시나리오</span>
+                        </div>
+                    </div>
+                    <div style="height: 400px; max-height: 400px;">
+                        <canvas id="simulationChart2"></canvas>
+                    </div>
+                </div>
+                
+                <div id="aiInsightsSection2" class="card" style="display: none;">
+                    <h3>🔮 AI 분석 인사이트</h3>
+                    <div id="aiInsightsContent2"></div>
                 </div>
             </div>
         </div>
@@ -2013,6 +2233,9 @@
                     dataLoaded = true;
                     showStatus(`전체 ${data.total_months}개월 데이터 로드 완료`, 'success');
                     displayDataInfo(data, true);
+                    
+                    // 신뢰도 기반 시뮬레이터 설정 로드
+                    await loadReliabilityConfig();
                 } else {
                     showStatus('오류: ' + data.error, 'error');
                 }
@@ -3473,7 +3696,7 @@
                 const canvas = card.querySelector('canvas');
                 if (canvas) {
                     // 시뮬레이션 차트는 모달에서 제외
-                    if (canvas.id === 'simulationChart') {
+                    if (canvas.id === 'simulationChart1' || canvas.id === 'simulationChart2') {
                         console.log('📊 시뮬레이션 차트 - 모달 제외:', canvas.id);
                         return;
                     }
@@ -3890,26 +4113,168 @@
             `;
         }
         
-        // 시뮬레이션 관련 변수
-        let simulationChart = null;
+        // 시뮬레이션 관련 변수 (모드별 차트 인스턴스 분리)
+        let simulationChart1 = null;  // 모드 1: 충전기 → 점유율
+        let simulationChart2 = null;  // 모드 2: 점유율 → 충전기
+        let ragDataRange = { earliest: null, latest: null, months: [] };
         
-        // 시뮬레이션 월 목록 로드
-        function loadSimulationMonths() {
+        // 시뮬레이션 월 목록 로드 (레거시 - 신뢰도 설정으로 대체됨)
+        async function loadSimulationMonths() {
             if (availableMonths.length > 0) {
-                const select = document.getElementById('simBaseMonth');
-                select.innerHTML = '<option value="">선택하세요</option>';
+                // RAG 데이터 범위 저장
+                ragDataRange.months = availableMonths;
+                ragDataRange.earliest = availableMonths[availableMonths.length - 1];
+                ragDataRange.latest = availableMonths[0];
                 
-                availableMonths.forEach(month => {
-                    const option = document.createElement('option');
-                    option.value = month;
-                    option.textContent = month;
-                    select.appendChild(option);
-                });
-                
-                // 최신월을 기본 선택
-                if (availableMonths.length > 0) {
-                    select.value = availableMonths[0];
+                // 신뢰도 설정이 로드되지 않은 경우에만 기본값 설정
+                if (!reliabilityConfig) {
+                    const baseMonthInput = document.getElementById('simBaseMonth');
+                    baseMonthInput.value = ragDataRange.latest;
                 }
+                
+                // GS차지비 점유율 데이터 로드 (모드 2용)
+                try {
+                    const response = await fetch('/api/gs-chargebi-history');
+                    const data = await response.json();
+                    if (data.success) {
+                        window.gsChargebiData = data.history;
+                        console.log('✅ GS차지비 히스토리 로드:', window.gsChargebiData.length, '개월');
+                    }
+                } catch (error) {
+                    console.error('GS차지비 히스토리 로드 실패:', error);
+                }
+            }
+        }
+        
+        // 신뢰도 설정 저장
+        let reliabilityConfig = null;
+        
+        // 신뢰도 기반 시뮬레이터 설정 로드
+        async function loadReliabilityConfig() {
+            try {
+                const response = await fetch('/api/scenario-simulator/reliability-config');
+                const data = await response.json();
+                
+                if (data.success) {
+                    reliabilityConfig = data;
+                    console.log('✅ 신뢰도 설정 로드:', reliabilityConfig);
+                    
+                    // UI 업데이트
+                    document.getElementById('reliabilityBaseMonth').textContent = data.rag_latest_month || '-';
+                    document.getElementById('reliabilityMaxPeriod').textContent = `${data.max_reliable_period}개월`;
+                    document.getElementById('reliabilityEndMonth').textContent = data.prediction_end_month || '-';
+                    document.getElementById('reliabilityCurrentShare').textContent = data.current_gs_share ? `${data.current_gs_share.toFixed(2)}%` : '-';
+                    
+                    // 기준월 고정 (RAG 최신 데이터)
+                    const baseMonthInput = document.getElementById('simBaseMonth');
+                    if (baseMonthInput) {
+                        baseMonthInput.value = data.rag_latest_month || '';
+                    }
+                    
+                    // 예측 기간 옵션 동적 생성 (신뢰도 기반)
+                    const simMonthsSelect = document.getElementById('simMonths');
+                    if (simMonthsSelect && data.available_periods && data.available_periods.length > 0) {
+                        simMonthsSelect.innerHTML = '';
+                        
+                        data.available_periods.forEach(period => {
+                            const option = document.createElement('option');
+                            option.value = period.months;
+                            const reliabilityBadge = period.reliability === 'HIGH' ? '🟢' : '🟡';
+                            option.textContent = `${period.months}개월 ${reliabilityBadge} (MAPE ${period.avg_mape}%)`;
+                            simMonthsSelect.appendChild(option);
+                        });
+                        
+                        // 기본값: 최대 신뢰 기간
+                        simMonthsSelect.value = data.max_reliable_period;
+                        console.log('✅ 예측 기간 옵션 생성 완료:', data.available_periods.length, '개');
+                    }
+                    
+                    // 기간 선택 시 오차 정보 업데이트
+                    if (simMonthsSelect) {
+                        simMonthsSelect.addEventListener('change', updatePeriodAccuracyInfo);
+                        updatePeriodAccuracyInfo();
+                    }
+                    
+                    // 현재 점유율 정보 업데이트
+                    if (data.current_gs_share) {
+                        const currentShareEl = document.getElementById('currentShareValue');
+                        if (currentShareEl) {
+                            currentShareEl.textContent = `${data.current_gs_share.toFixed(2)}%`;
+                        }
+                    }
+                    
+                    // 충전기 슬라이더 범위 설정 (신뢰도 기반)
+                    const chargerSlider = document.getElementById('chargerSlider');
+                    const chargerRange = data.extra_chargers_range;
+                    if (chargerSlider && chargerRange) {
+                        chargerSlider.min = chargerRange.min;
+                        chargerSlider.max = chargerRange.max;
+                        chargerSlider.step = chargerRange.step || 100;
+                        chargerSlider.value = 0;
+                        
+                        // 충전기 슬라이더 라벨 업데이트
+                        const chargerLabels = document.getElementById('chargerSliderLabels');
+                        if (chargerLabels) {
+                            const midValue = Math.round(chargerRange.max / 2);
+                            chargerLabels.innerHTML = `
+                                <span>0</span>
+                                <span>${midValue.toLocaleString()}</span>
+                                <span>${chargerRange.max.toLocaleString()}</span>
+                            `;
+                        }
+                        
+                        // 월평균 증가량 정보 표시
+                        const chargerAvgInfo = document.getElementById('chargerAvgInfo');
+                        const chargerAvgText = document.getElementById('chargerAvgText');
+                        if (chargerAvgInfo && chargerAvgText && chargerRange.avg_monthly) {
+                            chargerAvgText.textContent = `과거 월평균 증가량: ${chargerRange.avg_monthly.toLocaleString()}대`;
+                            chargerAvgInfo.style.display = 'block';
+                        }
+                        
+                        console.log('✅ 충전기 슬라이더 범위 설정:', chargerRange.min, '~', chargerRange.max);
+                        updateChargerCount();
+                    }
+                    
+                    // 목표 점유율 슬라이더 범위 설정 (신뢰도 기반)
+                    const targetSlider = document.getElementById('targetShareSlider');
+                    const targetRange = data.target_share_range;
+                    if (targetSlider && targetRange) {
+                        targetSlider.min = targetRange.min;
+                        targetSlider.max = targetRange.max;
+                        targetSlider.value = targetRange.current || targetRange.min;
+                        
+                        // 목표 점유율 슬라이더 라벨 업데이트 (#targetShareLabels ID 사용)
+                        const targetLabels = document.getElementById('targetShareLabels');
+                        if (targetLabels) {
+                            const midValue = ((targetRange.min + targetRange.max) / 2).toFixed(1);
+                            targetLabels.innerHTML = `
+                                <span>${targetRange.min.toFixed(1)}%</span>
+                                <span>${midValue}%</span>
+                                <span>${targetRange.max.toFixed(1)}%</span>
+                            `;
+                        }
+                        
+                        console.log('✅ 목표 점유율 범위 설정:', targetRange.min, '~', targetRange.max);
+                    }
+                    updateTargetShare();
+                }
+            } catch (error) {
+                console.error('신뢰도 설정 로드 실패:', error);
+            }
+        }
+        
+        // 선택된 기간의 오차 정보 표시
+        function updatePeriodAccuracyInfo() {
+            const simMonths = parseInt(document.getElementById('simMonths').value);
+            const infoDiv = document.getElementById('periodAccuracyInfo');
+            const textSpan = document.getElementById('periodAccuracyText');
+            
+            if (reliabilityConfig && reliabilityConfig.period_stats && reliabilityConfig.period_stats[simMonths]) {
+                const stats = reliabilityConfig.period_stats[simMonths];
+                textSpan.textContent = `예상 오차: MAPE ${stats.avg_mape}%, MAE ${stats.avg_mae}%p`;
+                infoDiv.style.display = 'block';
+            } else {
+                infoDiv.style.display = 'none';
             }
         }
         
@@ -3921,11 +4286,114 @@
             display.textContent = `${value.toLocaleString()}대`;
         }
         
+        // 목표 점유율 슬라이더 업데이트
+        function updateTargetShare() {
+            const slider = document.getElementById('targetShareSlider');
+            const display = document.getElementById('targetShareDisplay');
+            const value = parseFloat(slider.value);
+            display.textContent = `${value.toFixed(1)}%`;
+        }
+        
+        // 시뮬레이션 로딩 상태 추적 (탭 전환 시에도 유지)
+        let simLoadingState = {
+            mode1: false,
+            mode2: false
+        };
+        
+        // 시뮬레이션 모드 전환 (탭 방식) - 결과 영역도 분리
+        function switchSimMode(mode) {
+            const mode1Tab = document.getElementById('mode1Tab');
+            const mode2Tab = document.getElementById('mode2Tab');
+            const mode1Inputs = document.getElementById('mode1Inputs');
+            const mode2Inputs = document.getElementById('mode2Inputs');
+            const runBtn = document.getElementById('runSimBtn');
+            const modeValue = document.getElementById('simModeValue');
+            
+            // 결과 영역 (각 모드별 분리)
+            const results1 = document.getElementById('simulationResults1');
+            const results2 = document.getElementById('simulationResults2');
+            
+            // 모드 값 저장
+            modeValue.value = mode;
+            
+            if (mode === 'charger_to_share') {
+                mode1Tab.classList.add('active');
+                mode2Tab.classList.remove('active');
+                mode1Inputs.style.display = 'block';
+                mode2Inputs.style.display = 'none';
+                
+                // 로딩 중이면 버튼 상태 유지, 아니면 기본 텍스트
+                if (simLoadingState.mode1) {
+                    runBtn.innerHTML = '<span class="loading-spinner" style="width: 16px; height: 16px; border-width: 2px; margin-right: 8px; vertical-align: middle;"></span>AI 분석 중...';
+                    runBtn.disabled = true;
+                    runBtn.style.opacity = '0.8';
+                } else {
+                    runBtn.innerHTML = '🤖 AI 예측 실행';
+                    runBtn.disabled = false;
+                    runBtn.style.opacity = '1';
+                }
+                
+                // 결과 영역 전환: 모드1 결과만 표시 (결과가 있거나 로딩 중인 경우)
+                if (results1 && (results1.dataset.hasResult === 'true' || simLoadingState.mode1)) {
+                    results1.classList.remove('hidden');
+                }
+                if (results2) {
+                    results2.classList.add('hidden');
+                }
+            } else {
+                mode1Tab.classList.remove('active');
+                mode2Tab.classList.add('active');
+                mode1Inputs.style.display = 'none';
+                mode2Inputs.style.display = 'block';
+                
+                // 로딩 중이면 버튼 상태 유지, 아니면 기본 텍스트
+                if (simLoadingState.mode2) {
+                    runBtn.innerHTML = '<span class="loading-spinner" style="width: 16px; height: 16px; border-width: 2px; margin-right: 8px; vertical-align: middle;"></span>AI 분석 중...';
+                    runBtn.disabled = true;
+                    runBtn.style.opacity = '0.8';
+                } else {
+                    runBtn.innerHTML = '🎯 필요 충전기 계산';
+                    runBtn.disabled = false;
+                    runBtn.style.opacity = '1';
+                }
+                
+                // 결과 영역 전환: 모드2 결과만 표시 (결과가 있거나 로딩 중인 경우)
+                if (results1) {
+                    results1.classList.add('hidden');
+                }
+                if (results2 && (results2.dataset.hasResult === 'true' || simLoadingState.mode2)) {
+                    results2.classList.remove('hidden');
+                }
+                
+                // 현재 점유율 업데이트
+                updateCurrentShareInfo();
+            }
+        }
+        
+        // 레거시 함수 (호환성 유지)
+        function toggleSimMode() {
+            const mode = document.getElementById('simModeValue').value;
+            switchSimMode(mode === 'charger_to_share' ? 'share_to_charger' : 'charger_to_share');
+        }
+        
+        // 현재 점유율 정보 업데이트 (모드 2용)
+        function updateCurrentShareInfo() {
+            if (reliabilityConfig && reliabilityConfig.current_gs_share) {
+                document.getElementById('currentShareValue').textContent = `${reliabilityConfig.current_gs_share.toFixed(2)}%`;
+                
+                // 목표 점유율 슬라이더 기본값을 현재 점유율로 설정
+                const targetSlider = document.getElementById('targetShareSlider');
+                const currentShare = reliabilityConfig.current_gs_share;
+                targetSlider.value = Math.min(25, Math.max(10, currentShare));
+                updateTargetShare();
+            }
+        }
+        
         // 시뮬레이션 실행
         async function runSimulation() {
             const baseMonth = document.getElementById('simBaseMonth').value;
-            const simulationMonths = parseInt(document.getElementById('simMonths').value);
-            const additionalChargers = parseInt(document.getElementById('chargerSlider').value);
+            const simPeriodMonths = parseInt(document.getElementById('simMonths').value);
+            const mode = document.getElementById('simModeValue').value;
             
             if (!baseMonth) {
                 alert('기준월을 선택해주세요.');
@@ -3934,26 +4402,105 @@
             
             const btn = document.getElementById('runSimBtn');
             const originalText = btn.textContent;
-            btn.textContent = '🔄 시뮬레이션 중...';
+            btn.innerHTML = '<span class="loading-spinner" style="width: 16px; height: 16px; border-width: 2px; margin-right: 8px; vertical-align: middle;"></span>AI 분석 중...';
             btn.disabled = true;
+            btn.style.opacity = '0.8';
+            
+            // 모드별 결과 영역 선택
+            const isMode1 = mode === 'charger_to_share';
+            
+            // 로딩 상태 설정 (탭 전환 시에도 유지)
+            if (isMode1) {
+                simLoadingState.mode1 = true;
+            } else {
+                simLoadingState.mode2 = true;
+            }
+            const resultsDiv = document.getElementById(isMode1 ? 'simulationResults1' : 'simulationResults2');
+            const summaryDiv = document.getElementById(isMode1 ? 'simulationSummary1' : 'simulationSummary2');
+            const insightsSection = document.getElementById(isMode1 ? 'aiInsightsSection1' : 'aiInsightsSection2');
+            const chartCanvas = document.getElementById(isMode1 ? 'simulationChart1' : 'simulationChart2');
+            
+            // AI 인사이트 섹션 숨기기
+            if (insightsSection) {
+                insightsSection.style.display = 'none';
+            }
+            
+            // 기존 차트 제거 (모드별)
+            if (isMode1 && simulationChart1) {
+                simulationChart1.destroy();
+                simulationChart1 = null;
+            } else if (!isMode1 && simulationChart2) {
+                simulationChart2.destroy();
+                simulationChart2 = null;
+            }
+            
+            // 차트 영역 초기화
+            if (chartCanvas) {
+                const ctx = chartCanvas.getContext('2d');
+                ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+            }
+            
+            // 모드에 따른 파라미터 설정
+            let requestBody, loadingMessage;
+            
+            if (mode === 'charger_to_share') {
+                // 모드 1: 충전기 → 점유율
+                const extraChargers = parseInt(document.getElementById('chargerSlider').value);
+                requestBody = {
+                    mode: 'charger_to_share',
+                    baseMonth: baseMonth,
+                    simPeriodMonths: simPeriodMonths,
+                    extraChargers: extraChargers
+                };
+                loadingMessage = `기준월: ${baseMonth} | 예측 기간: ${simPeriodMonths}개월 | 추가 충전기: ${extraChargers.toLocaleString()}대`;
+            } else {
+                // 모드 2: 목표 점유율 → 필요 충전기
+                const targetShare = parseFloat(document.getElementById('targetShareSlider').value);
+                requestBody = {
+                    mode: 'share_to_charger',
+                    baseMonth: baseMonth,
+                    simPeriodMonths: simPeriodMonths,
+                    targetShare: targetShare
+                };
+                loadingMessage = `기준월: ${baseMonth} | 예측 기간: ${simPeriodMonths}개월 | 목표 점유율: ${targetShare.toFixed(1)}%`;
+            }
+            
+            // 로딩 상태 표시
+            summaryDiv.innerHTML = `
+                <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+                    <div class="loading-spinner" style="margin: 0 auto 16px;"></div>
+                    <p style="color: var(--text-secondary);">🤖 AI가 RAG 데이터를 분석하여 ${mode === 'charger_to_share' ? '미래를 예측' : '필요 충전기를 계산'}하고 있습니다...</p>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
+                        ${loadingMessage}
+                    </p>
+                </div>
+            `;
+            resultsDiv.classList.remove('hidden');
             
             try {
-                const response = await fetch('/api/simulation/predict', {
+                // API 호출
+                const response = await fetch('/api/scenario-simulator', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        baseMonth: baseMonth,
-                        simulationMonths: simulationMonths,
-                        additionalChargers: additionalChargers
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 const result = await response.json();
+                console.log('📊 API 응답:', result);
                 
                 if (result.success) {
-                    displaySimulationResults(result.prediction);
+                    // 모드에 따라 다른 결과 표시
+                    if (mode === 'charger_to_share') {
+                        displaySimulationResults(result);
+                        // 결과 있음 플래그 설정
+                        resultsDiv.dataset.hasResult = 'true';
+                    } else {
+                        displayTargetShareResults(result);
+                        // 결과 있음 플래그 설정
+                        resultsDiv.dataset.hasResult = 'true';
+                    }
                 } else {
                     alert('시뮬레이션 실패: ' + result.error);
                 }
@@ -3961,127 +4508,319 @@
                 console.error('시뮬레이션 오류:', error);
                 alert('시뮬레이션 중 오류가 발생했습니다.');
             } finally {
-                btn.textContent = originalText;
+                // 로딩 상태 해제
+                if (isMode1) {
+                    simLoadingState.mode1 = false;
+                    btn.innerHTML = '🤖 AI 예측 실행';
+                } else {
+                    simLoadingState.mode2 = false;
+                    btn.innerHTML = '🎯 필요 충전기 계산';
+                }
                 btn.disabled = false;
+                btn.style.opacity = '1';
             }
         }
         
-        // 시뮬레이션 결과 표시
+        // AI 시뮬레이션 결과 표시 (모드 1: 충전기 → 점유율)
         function displaySimulationResults(data) {
-            const resultsDiv = document.getElementById('simulationResults');
-            const summaryDiv = document.getElementById('simulationSummary');
+            console.log('📊 AI 시뮬레이션 결과:', data);
             
-            // 결과 요약 카드들
-            const currentStatus = data.current_status;
-            const finalPrediction = data.final_prediction;
+            const resultsDiv = document.getElementById('simulationResults1');
+            const summaryDiv = document.getElementById('simulationSummary1');
+            
+            // 새로운 API 응답 구조에 맞게 데이터 추출
+            const meta = data.meta || {};
+            const analysis = data.analysis || {};
+            const baselinePred = data.baseline_prediction || {};
+            const scenarioPred = data.scenario_prediction || {};
+            const insights = data.insights || {};
+            const confidence = data.confidence || {};
+            
+            // 현재 시장점유율 (analysis에서 가져오기)
+            const currentShare = analysis.current_market_share || 0;
+            const baselineShare = baselinePred.final_market_share || currentShare;
+            const scenarioShare = scenarioPred.final_market_share || currentShare;
+            
+            // 점유율 변화량 계산
+            const baselineChange = baselineShare - currentShare;
+            const scenarioChange = scenarioShare - currentShare;
+            const additionalEffect = scenarioPred.market_share_increase || (scenarioShare - baselineShare);
+            
+            // 예측 기간
+            const simPeriodMonths = meta.sim_period_months || 6;
+            const extraChargers = meta.extra_chargers || 0;
             
             summaryDiv.innerHTML = `
                 <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
                     <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--brand-primary); margin-bottom: 4px;">
-                        ${currentStatus.market_share.toFixed(1)}%
+                        ${currentShare.toFixed(2)}%
                     </div>
-                    <div style="font-size: 12px; color: var(--text-muted);">현재 시장점유율</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">기준월 시장점유율</div>
+                </div>
+                
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: #4299e1; margin-bottom: 4px;">
+                        ${baselineShare.toFixed(2)}%
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">추세 기준 예측 (${simPeriodMonths}개월 후)</div>
+                    <div style="font-size: 11px; color: ${baselineChange >= 0 ? 'var(--success)' : 'var(--error)'}; margin-top: 4px;">
+                        ${baselineChange >= 0 ? '+' : ''}${baselineChange.toFixed(2)}%p
+                    </div>
+                </div>
+                
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: #ed8936; margin-bottom: 4px;">
+                        ${scenarioShare.toFixed(2)}%
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">시나리오 예측 (+${extraChargers.toLocaleString()}대)</div>
+                    <div style="font-size: 11px; color: ${scenarioChange >= 0 ? 'var(--success)' : 'var(--error)'}; margin-top: 4px;">
+                        ${scenarioChange >= 0 ? '+' : ''}${scenarioChange.toFixed(2)}%p
+                    </div>
                 </div>
                 
                 <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
                     <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--success); margin-bottom: 4px;">
-                        ${finalPrediction.market_share.toFixed(1)}%
-                    </div>
-                    <div style="font-size: 12px; color: var(--text-muted);">${data.simulation_months}개월 후 예측</div>
-                </div>
-                
-                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
-                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--warning); margin-bottom: 4px;">
-                        +${finalPrediction.market_share_increase.toFixed(1)}%p
-                    </div>
-                    <div style="font-size: 12px; color: var(--text-muted);">점유율 증가</div>
-                </div>
-                
-                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
-                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--info); margin-bottom: 4px;">
-                        +${finalPrediction.additional_effect.toFixed(1)}%p
+                        ${additionalEffect >= 0 ? '+' : ''}${additionalEffect.toFixed(2)}%p
                     </div>
                     <div style="font-size: 12px; color: var(--text-muted);">추가 충전기 효과</div>
                 </div>
             `;
             
-            // 차트 생성
+            // AI 미래 예측 인사이트 표시 (모드 1용)
+            displayAIInsights(data, 1);
+            
+            // 차트 생성 (새로운 차트 렌더링 규칙 적용) - 모드 1용
             createSimulationChart(data);
             
             // 결과 영역 표시
             resultsDiv.classList.remove('hidden');
         }
         
-        // 시뮬레이션 차트 생성
-        function createSimulationChart(data) {
-            const ctx = document.getElementById('simulationChart').getContext('2d');
+        // 모드 2: 목표 점유율 → 필요 충전기 결과 표시
+        function displayTargetShareResults(data) {
+            console.log('🎯 목표 점유율 분석 결과:', data);
             
-            // 기존 차트 제거
-            if (simulationChart) {
-                simulationChart.destroy();
+            const resultsDiv = document.getElementById('simulationResults2');
+            const summaryDiv = document.getElementById('simulationSummary2');
+            
+            const meta = data.meta || {};
+            const analysis = data.analysis || {};
+            const targetAnalysis = data.target_analysis || {};
+            const insights = data.insights || {};
+            const confidence = data.confidence || {};
+            
+            const currentShare = analysis.current_market_share || 0;
+            const targetShare = meta.target_share || 0;
+            const simPeriodMonths = meta.sim_period_months || 6;
+            const requiredChargers = targetAnalysis.required_chargers || 0;
+            const monthlyChargers = targetAnalysis.monthly_chargers || 0;
+            const feasibility = targetAnalysis.feasibility || 'UNKNOWN';
+            const baselineShare = targetAnalysis.baseline_share || currentShare;
+            
+            // 목표 달성 가능성에 따른 색상 및 텍스트
+            let feasibilityColor, feasibilityText;
+            switch(feasibility) {
+                case 'ALREADY_ACHIEVED':
+                    feasibilityColor = 'var(--success)';
+                    feasibilityText = '✅ 이미 달성';
+                    break;
+                case 'TREND_ACHIEVABLE':
+                    feasibilityColor = 'var(--success)';
+                    feasibilityText = '📈 추세로 달성';
+                    break;
+                case 'ACHIEVABLE':
+                    feasibilityColor = 'var(--success)';
+                    feasibilityText = '달성 가능';
+                    break;
+                case 'CHALLENGING':
+                    feasibilityColor = 'var(--warning)';
+                    feasibilityText = '도전적';
+                    break;
+                case 'DIFFICULT':
+                    feasibilityColor = 'var(--error)';
+                    feasibilityText = '달성 어려움';
+                    break;
+                default:
+                    feasibilityColor = 'var(--text-muted)';
+                    feasibilityText = '분석 중';
             }
             
-            const months = data.prediction.map(p => p.month);
-            const predictionData = data.prediction.map(p => p.market_share);
-            const baselineData = data.baseline.map(b => b.market_share);
+            // ALREADY_ACHIEVED 또는 TREND_ACHIEVABLE인 경우 특별 처리
+            const isAlreadyAchieved = feasibility === 'ALREADY_ACHIEVED' || feasibility === 'TREND_ACHIEVABLE';
             
-            // 현재 데이터와 예측 데이터 구분
-            const currentIndex = data.prediction.findIndex(p => p.is_prediction);
-            const currentMonths = months.slice(0, currentIndex);
-            const futureMonths = months.slice(currentIndex - 1); // 연결점 포함
+            summaryDiv.innerHTML = `
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--brand-primary); margin-bottom: 4px;">
+                        ${currentShare.toFixed(2)}%
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">현재 시장점유율</div>
+                </div>
+                
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: #4299e1; margin-bottom: 4px;">
+                        ${baselineShare.toFixed(2)}%
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">추세 유지 시 예상 (${simPeriodMonths}개월 후)</div>
+                </div>
+                
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center; border: 2px solid var(--warning);">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--warning); margin-bottom: 4px;">
+                        ${targetShare.toFixed(2)}%
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">목표 시장점유율</div>
+                    <div style="font-size: 11px; color: var(--warning); margin-top: 4px;">
+                        ${(targetShare - currentShare) >= 0 ? '+' : ''}${(targetShare - currentShare).toFixed(2)}%p 필요
+                    </div>
+                </div>
+                
+                <div style="background: ${isAlreadyAchieved ? 'linear-gradient(135deg, rgba(72, 187, 120, 0.1), rgba(72, 187, 120, 0.2))' : 'linear-gradient(135deg, rgba(237, 137, 54, 0.1), rgba(237, 137, 54, 0.2))'}; padding: 16px; border-radius: 8px; text-align: center; border: 2px solid ${isAlreadyAchieved ? 'var(--success)' : '#ed8936'};">
+                    <div style="font-size: 28px; font-weight: var(--fw-bold); color: ${isAlreadyAchieved ? 'var(--success)' : '#ed8936'}; margin-bottom: 4px;">
+                        ${requiredChargers.toLocaleString()}대
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">필요 추가 충전기 (총)</div>
+                    <div style="font-size: 14px; color: ${isAlreadyAchieved ? 'var(--success)' : '#ed8936'}; margin-top: 8px; font-weight: var(--fw-semibold);">
+                        ${isAlreadyAchieved ? '✅ 추가 설치 불필요' : `월평균 ${monthlyChargers.toLocaleString()}대 설치 필요`}
+                    </div>
+                </div>
+                
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center; grid-column: span 2;">
+                    <div style="display: flex; justify-content: center; align-items: center; gap: 12px;">
+                        <span style="font-size: 14px; color: var(--text-muted);">목표 달성 가능성:</span>
+                        <span style="font-size: 18px; font-weight: var(--fw-bold); color: ${feasibilityColor}; padding: 4px 16px; border-radius: 20px; background: ${feasibilityColor}20;">
+                            ${feasibilityText}
+                        </span>
+                    </div>
+                    ${targetAnalysis.feasibility_reason ? `
+                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
+                        ${targetAnalysis.feasibility_reason}
+                    </p>
+                    ` : ''}
+                </div>
+            `;
             
-            const currentPrediction = predictionData.slice(0, currentIndex);
-            const futurePrediction = predictionData.slice(currentIndex - 1);
+            // AI 인사이트 표시 (모드 2용)
+            displayAIInsights(data, 2);
             
-            const currentBaseline = baselineData.slice(0, currentIndex);
-            const futureBaseline = baselineData.slice(currentIndex - 1);
+            // 차트 생성 (목표선 포함) - 모드 2용
+            createTargetShareChart(data);
             
-            simulationChart = new Chart(ctx, {
+            // 결과 영역 표시
+            resultsDiv.classList.remove('hidden');
+        }
+        
+        // 목표 점유율 차트 생성 (모드 2용)
+        function createTargetShareChart(data) {
+            const ctx = document.getElementById('simulationChart2').getContext('2d');
+            
+            if (simulationChart2) {
+                simulationChart2.destroy();
+            }
+            
+            const meta = data.meta || {};
+            const history = data.history || [];
+            const targetAnalysis = data.target_analysis || {};
+            const baseMonth = meta.base_month;
+            const targetShare = meta.target_share;
+            const simPeriodMonths = meta.sim_period_months;
+            
+            // 히스토리 데이터
+            const historyMonths = history.map(h => h.month);
+            const historyData = history.map(h => h.market_share);
+            
+            // 예측 데이터
+            const baselinePredictions = targetAnalysis.baseline_predictions || [];
+            const scenarioPredictions = targetAnalysis.scenario_predictions || [];
+            
+            // 전체 월 라벨
+            const predMonths = baselinePredictions.map(p => p.month);
+            const allMonths = [...new Set([...historyMonths, ...predMonths])].sort();
+            
+            // 데이터셋 구성
+            const actualDataset = allMonths.map(m => {
+                if (m <= baseMonth) {
+                    const idx = historyMonths.indexOf(m);
+                    return idx >= 0 ? historyData[idx] : null;
+                }
+                return null;
+            });
+            
+            const baselineDataset = allMonths.map(m => {
+                if (m > baseMonth) {
+                    const pred = baselinePredictions.find(p => p.month === m);
+                    return pred ? pred.market_share : null;
+                }
+                if (m === baseMonth) {
+                    const idx = historyMonths.indexOf(m);
+                    return idx >= 0 ? historyData[idx] : null;
+                }
+                return null;
+            });
+            
+            const scenarioDataset = allMonths.map(m => {
+                if (m > baseMonth) {
+                    const pred = scenarioPredictions.find(p => p.month === m);
+                    return pred ? pred.market_share : null;
+                }
+                if (m === baseMonth) {
+                    const idx = historyMonths.indexOf(m);
+                    return idx >= 0 ? historyData[idx] : null;
+                }
+                return null;
+            });
+            
+            // 목표선 (수평선)
+            const targetLineDataset = allMonths.map(() => targetShare);
+            
+            const baseMonthIdx = allMonths.indexOf(baseMonth);
+            
+            simulationChart2 = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: months,
+                    labels: allMonths,
                     datasets: [
                         {
-                            label: '현재 추세 (기준선)',
-                            data: currentBaseline.concat(new Array(futureBaseline.length - 1).fill(null)),
-                            borderColor: '#94a3b8',
-                            backgroundColor: 'rgba(148, 163, 184, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            pointRadius: 4,
-                            pointHoverRadius: 6
-                        },
-                        {
-                            label: '기준선 예측',
-                            data: new Array(currentBaseline.length - 1).fill(null).concat(futureBaseline),
-                            borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            fill: false,
-                            pointRadius: 4,
-                            pointHoverRadius: 6
-                        },
-                        {
-                            label: '현재 실적',
-                            data: currentPrediction.concat(new Array(futurePrediction.length - 1).fill(null)),
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            label: '학습용 실제값',
+                            data: actualDataset,
+                            borderColor: '#48bb78',
+                            backgroundColor: 'rgba(72, 187, 120, 0.1)',
                             borderWidth: 3,
                             fill: false,
-                            pointRadius: 5,
-                            pointHoverRadius: 7
+                            pointRadius: 4,
+                            tension: 0.1,
+                            order: 4
                         },
                         {
-                            label: '시나리오 예측',
-                            data: new Array(currentPrediction.length - 1).fill(null).concat(futurePrediction),
+                            label: `목표 점유율 (${targetShare.toFixed(1)}%)`,
+                            data: targetLineDataset,
                             borderColor: '#f59e0b',
-                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                            borderWidth: 3,
+                            borderWidth: 2,
                             borderDash: [10, 5],
                             fill: false,
-                            pointRadius: 5,
-                            pointHoverRadius: 7
+                            pointRadius: 0,
+                            tension: 0,
+                            order: 0
+                        },
+                        {
+                            label: '목표 달성 시나리오',
+                            data: scenarioDataset,
+                            borderColor: '#ed8936',
+                            borderWidth: 2,
+                            borderDash: [8, 4],
+                            fill: false,
+                            pointRadius: 4,
+                            tension: 0.1,
+                            order: 1
+                        },
+                        {
+                            label: '현재 추세 유지',
+                            data: baselineDataset,
+                            borderColor: '#4299e1',
+                            borderWidth: 2,
+                            borderDash: [8, 4],
+                            fill: false,
+                            pointRadius: 4,
+                            tension: 0.1,
+                            order: 2
                         }
                     ]
                 },
@@ -4091,23 +4830,449 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: `GS차지비 시장점유율 시뮬레이션 (${data.additional_chargers.toLocaleString()}대 추가 설치)`,
-                            font: {
-                                size: 16,
-                                weight: 'bold'
-                            }
+                            text: `목표 점유율 ${targetShare.toFixed(1)}% 달성을 위한 시나리오`,
+                            font: { size: 16, weight: 'bold' }
+                        },
+                        subtitle: {
+                            display: true,
+                            text: `기준월: ${baseMonth} | 목표 기간: ${simPeriodMonths}개월`,
+                            font: { size: 12 },
+                            color: '#718096'
                         },
                         legend: {
                             display: true,
                             position: 'top'
                         },
+                        annotation: {
+                            annotations: {
+                                baseMonthLine: {
+                                    type: 'line',
+                                    xMin: baseMonthIdx,
+                                    xMax: baseMonthIdx,
+                                    borderColor: 'rgba(72, 187, 120, 0.7)',
+                                    borderWidth: 2,
+                                    borderDash: [4, 4],
+                                    label: {
+                                        display: true,
+                                        content: '기준월',
+                                        position: 'start',
+                                        backgroundColor: 'rgba(72, 187, 120, 0.8)',
+                                        color: 'white',
+                                        font: { size: 10 }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            title: { display: true, text: '시장점유율 (%)' },
+                            suggestedMin: Math.min(...historyData.filter(v => v), targetShare) - 1,
+                            suggestedMax: Math.max(...historyData.filter(v => v), targetShare) + 1
+                        }
+                    }
+                }
+            });
+        }
+        
+        // AI 미래 예측 인사이트 표시 (모드별 분리)
+        function displayAIInsights(data, mode = 1) {
+            const insights = data.insights || {};
+            const analysis = data.analysis || {};
+            const meta = data.meta || {};
+            const confidence = data.confidence || {};
+            const baselinePred = data.baseline_prediction || {};
+            const scenarioPred = data.scenario_prediction || {};
+            
+            // 모드별 요소 선택
+            const insightsSection = document.getElementById(mode === 1 ? 'aiInsightsSection1' : 'aiInsightsSection2');
+            const insightsContent = document.getElementById(mode === 1 ? 'aiInsightsContent1' : 'aiInsightsContent2');
+            
+            // 현재 시장점유율과 예측값
+            const currentShare = analysis.current_market_share || 0;
+            const baselineShare = baselinePred.final_market_share || currentShare;
+            const scenarioShare = scenarioPred.final_market_share || currentShare;
+            const simPeriodMonths = meta.sim_period_months || 6;
+            const extraChargers = meta.extra_chargers || 0;
+            
+            // 인사이트 HTML 생성
+            insightsContent.innerHTML = `
+                <!-- 시장 분석 -->
+                <div style="margin-top: 16px;">
+                    <h4 style="color: var(--brand-primary); margin-bottom: 12px; font-size: 16px;">📊 시장 분석</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                        <div style="background: var(--bg-surface); padding: 12px; border-radius: 8px;">
+                            <div style="font-size: 12px; color: var(--text-muted);">전체 시장 월평균 성장률</div>
+                            <div style="font-size: 18px; font-weight: var(--fw-bold); color: var(--brand-primary);">
+                                ${analysis.market_monthly_growth_rate || 'N/A'}%
+                            </div>
+                        </div>
+                        <div style="background: var(--bg-surface); padding: 12px; border-radius: 8px;">
+                            <div style="font-size: 12px; color: var(--text-muted);">GS차지비 월평균 성장률</div>
+                            <div style="font-size: 18px; font-weight: var(--fw-bold); color: var(--success);">
+                                ${analysis.gs_monthly_growth_rate || 'N/A'}%
+                            </div>
+                        </div>
+                    </div>
+                    <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.6;">
+                        ${insights.market_analysis || analysis.market_trend_summary || ''}
+                    </p>
+                </div>
+                
+                <!-- 미래 예측 요약 -->
+                <div style="margin-top: 24px;">
+                    <h4 style="color: var(--warning); margin-bottom: 12px; font-size: 16px;">🔮 미래 예측 요약</h4>
+                    <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; margin-bottom: 12px;">
+                        <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">
+                            <strong>기준월에서 ${simPeriodMonths}개월 후:</strong>
+                        </p>
+                        <ul style="font-size: 14px; color: var(--text-secondary); padding-left: 20px; margin: 0;">
+                            <li style="margin-bottom: 6px;">
+                                <span style="color: #4299e1;">추세 기준 예상 점유율:</span> 
+                                <strong>${baselineShare.toFixed(2)}%</strong>
+                                (${(baselineShare - currentShare) >= 0 ? '+' : ''}${(baselineShare - currentShare).toFixed(2)}%p)
+                            </li>
+                            <li>
+                                <span style="color: #ed8936;">시나리오 기준 예상 점유율:</span> 
+                                <strong>${scenarioShare.toFixed(2)}%</strong>
+                                (${(scenarioShare - currentShare) >= 0 ? '+' : ''}${(scenarioShare - currentShare).toFixed(2)}%p)
+                            </li>
+                        </ul>
+                    </div>
+                    <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.6;">
+                        ${insights.future_prediction_summary || ''}
+                    </p>
+                </div>
+                
+                <!-- 주요 발견 -->
+                ${insights.key_findings && insights.key_findings.length > 0 ? `
+                <div style="margin-top: 24px;">
+                    <h4 style="color: var(--success); margin-bottom: 12px; font-size: 16px;">💡 주요 발견</h4>
+                    <ul style="font-size: 14px; color: var(--text-secondary); padding-left: 20px;">
+                        ${insights.key_findings.map(f => `<li style="margin-bottom: 8px; line-height: 1.5;">${f}</li>`).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+                
+                <!-- 권고사항 -->
+                ${insights.recommendations && insights.recommendations.length > 0 ? `
+                <div style="margin-top: 24px;">
+                    <h4 style="color: var(--info); margin-bottom: 12px; font-size: 16px;">📋 권고사항</h4>
+                    <ul style="font-size: 14px; color: var(--text-secondary); padding-left: 20px;">
+                        ${insights.recommendations.map(r => `<li style="margin-bottom: 8px; line-height: 1.5;">${r}</li>`).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+                
+                <!-- 신뢰도 및 메타 정보 -->
+                <div style="margin-top: 24px; padding: 16px; background: var(--bg-surface); border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <span style="font-size: 12px; color: var(--text-muted);">AI 예측 신뢰도:</span>
+                            <span style="font-weight: var(--fw-bold); margin-left: 8px; padding: 4px 12px; border-radius: 4px; font-size: 12px;
+                                background: ${confidence.level === 'HIGH' ? 'rgba(16, 185, 129, 0.1)' : confidence.level === 'MEDIUM' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)'};
+                                color: ${confidence.level === 'HIGH' ? 'var(--success)' : confidence.level === 'MEDIUM' ? 'var(--warning)' : 'var(--error)'};">
+                                ${confidence.level || 'N/A'}
+                            </span>
+                            ${confidence.level === 'LOW' ? '<span style="margin-left: 8px; font-size: 11px; color: var(--error);">⚠️ 예측 신뢰도 낮음</span>' : ''}
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-muted);">
+                            분석 시간: ${meta.total_time || 0}초
+                        </div>
+                    </div>
+                    
+                    ${meta.confidence_warning ? `
+                    <div style="margin-top: 12px; padding: 8px 12px; background: rgba(245, 158, 11, 0.1); border-radius: 4px; border-left: 3px solid var(--warning);">
+                        <span style="font-size: 12px; color: var(--warning);">
+                            ⚠️ 선택한 예측 기간(${simPeriodMonths}개월)이 권장 최대 기간(${meta.recommended_max_period || 6}개월)을 초과합니다. 예측 정확도가 낮아질 수 있습니다.
+                        </span>
+                    </div>
+                    ` : ''}
+                    
+                    ${meta.backtest_stats ? `
+                    <div style="margin-top: 12px; padding: 8px 12px; background: rgba(66, 153, 225, 0.1); border-radius: 4px;">
+                        <span style="font-size: 12px; color: var(--info);">
+                            📊 ${meta.backtest_stats.comment || ''}
+                        </span>
+                    </div>
+                    ` : ''}
+                    
+                    ${meta.is_backtest_mode ? `
+                    <div style="margin-top: 12px; padding: 8px 12px; background: rgba(159, 122, 234, 0.1); border-radius: 4px; border-left: 3px solid #9f7aea;">
+                        <span style="font-size: 12px; color: #9f7aea;">
+                            🔬 <strong>검증 모드:</strong> 기준월(${meta.base_month})이 RAG 최신월(${meta.rag_latest_month})보다 과거입니다. 
+                            ${meta.verifiable_months}개월의 예측값을 실제값과 비교할 수 있습니다. 
+                            차트에서 보라색 선이 검증용 실제값입니다.
+                        </span>
+                    </div>
+                    ` : ''}
+                    
+                    ${confidence.reason ? `
+                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 12px; line-height: 1.5;">
+                        ${confidence.reason}
+                    </p>
+                    ` : ''}
+                </div>
+            `;
+            
+            // 인사이트 섹션 표시
+            insightsSection.style.display = 'block';
+        }
+        
+        // AI 시뮬레이션 차트 생성 (모드 1용 - 새로운 차트 렌더링 규칙 적용)
+        function createSimulationChart(data) {
+            const ctx = document.getElementById('simulationChart1').getContext('2d');
+            
+            // 기존 차트 제거
+            if (simulationChart1) {
+                simulationChart1.destroy();
+            }
+            
+            const meta = data.meta || {};
+            const ragLatestMonth = meta.rag_latest_month || ragDataRange.latest;
+            const baseMonth = meta.base_month;
+            const simPeriodMonths = meta.sim_period_months || 6;
+            const extraChargers = meta.extra_chargers || 0;
+            const isBacktestMode = meta.is_backtest_mode || false;
+            
+            // 히스토리 데이터 (기준월까지의 학습용 데이터)
+            const history = data.history || [];
+            const historyMonths = history.map(h => h.month);
+            const historyData = history.map(h => h.market_share);
+            
+            // 검증용 실제값 (기준월 이후, RAG에 존재하는 데이터)
+            const actualFutureData = data.actual_future_data || [];
+            const actualFutureMap = {};
+            actualFutureData.forEach(d => {
+                actualFutureMap[d.month] = d.actual_market_share;
+            });
+            
+            // 기준 추세 예측 데이터
+            const baselinePred = data.baseline_prediction || {};
+            const baselineMonthly = baselinePred.monthly_predictions || [];
+            
+            // 시나리오 예측 데이터
+            const scenarioPred = data.scenario_prediction || {};
+            const scenarioMonthly = scenarioPred.monthly_predictions || [];
+            
+            // 전체 월 라벨 생성 (히스토리 + 예측 + 검증용 실제값)
+            const predictionMonths = baselineMonthly.map(p => p.month);
+            const actualFutureMonths = actualFutureData.map(d => d.month);
+            const allMonths = [...new Set([...historyMonths, ...predictionMonths, ...actualFutureMonths])].sort();
+            
+            // 차트 렌더링 규칙 (핵심: 기준월 기준으로 분리)
+            // 1. 학습용 실제값 (초록 실선): 기준월까지의 데이터
+            const actualDataset = allMonths.map(m => {
+                if (m <= baseMonth) {
+                    const idx = historyMonths.indexOf(m);
+                    return idx >= 0 ? historyData[idx] : null;
+                }
+                return null;
+            });
+            
+            // 2. 검증용 실제값 (보라 실선): 기준월 이후 ~ RAG 최신월 (백테스트 모드에서만)
+            const verifyActualDataset = allMonths.map(m => {
+                if (m > baseMonth && m <= ragLatestMonth && actualFutureMap[m] !== undefined) {
+                    return actualFutureMap[m];
+                }
+                // 연결점: 기준월에서 시작
+                if (m === baseMonth && isBacktestMode) {
+                    const idx = historyMonths.indexOf(m);
+                    return idx >= 0 ? historyData[idx] : null;
+                }
+                return null;
+            });
+            
+            // 3. 기준 추세 예측 (파란 점선): 기준월 이후
+            const baselineDataset = allMonths.map(m => {
+                if (m > baseMonth) {
+                    const pred = baselineMonthly.find(p => p.month === m);
+                    return pred ? pred.market_share : null;
+                }
+                // 연결점: 기준월에서 시작
+                if (m === baseMonth) {
+                    const idx = historyMonths.indexOf(m);
+                    return idx >= 0 ? historyData[idx] : null;
+                }
+                return null;
+            });
+            
+            // 4. 시나리오 예측 (주황 점선): 기준월 이후
+            const scenarioDataset = allMonths.map(m => {
+                if (m > baseMonth) {
+                    const pred = scenarioMonthly.find(p => p.month === m);
+                    return pred ? pred.market_share : null;
+                }
+                // 연결점: 기준월에서 시작
+                if (m === baseMonth) {
+                    const idx = historyMonths.indexOf(m);
+                    return idx >= 0 ? historyData[idx] : null;
+                }
+                return null;
+            });
+            
+            // 기준월 위치 (수직선 표시용)
+            const baseMonthIdx = allMonths.indexOf(baseMonth);
+            const ragLatestIdx = allMonths.indexOf(ragLatestMonth);
+            
+            // 데이터셋 구성
+            const datasets = [
+                {
+                    label: '학습용 실제값 (기준월까지)',
+                    data: actualDataset,
+                    borderColor: '#48bb78',
+                    backgroundColor: 'rgba(72, 187, 120, 0.1)',
+                    borderWidth: 3,
+                    fill: false,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#48bb78',
+                    tension: 0.1,
+                    spanGaps: false,
+                    order: 4
+                },
+                {
+                    label: `추가 설치 시나리오 (+${extraChargers.toLocaleString()}대)`,
+                    data: scenarioDataset,
+                    borderColor: '#ed8936',
+                    backgroundColor: 'rgba(237, 137, 54, 0.1)',
+                    borderWidth: 2,
+                    borderDash: [8, 4],
+                    fill: false,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#ed8936',
+                    tension: 0.1,
+                    spanGaps: false,
+                    order: 1
+                },
+                {
+                    label: '현재 추세 기준 예측',
+                    data: baselineDataset,
+                    borderColor: '#4299e1',
+                    backgroundColor: 'rgba(66, 153, 225, 0.1)',
+                    borderWidth: 2,
+                    borderDash: [8, 4],
+                    fill: false,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#4299e1',
+                    tension: 0.1,
+                    spanGaps: false,
+                    order: 2
+                }
+            ];
+            
+            // 백테스트 모드일 때 검증용 실제값 추가
+            if (isBacktestMode && actualFutureData.length > 0) {
+                datasets.push({
+                    label: '검증용 실제값 (RAG 데이터)',
+                    data: verifyActualDataset,
+                    borderColor: '#9f7aea',
+                    backgroundColor: 'rgba(159, 122, 234, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: '#9f7aea',
+                    pointStyle: 'rectRot',
+                    tension: 0.1,
+                    spanGaps: false,
+                    order: 3
+                });
+            }
+            
+            simulationChart1 = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: allMonths,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `AI 기반 GS차지비 시장점유율 예측`,
+                            font: {
+                                size: 16,
+                                weight: 'bold'
+                            },
+                            padding: { bottom: 20 }
+                        },
+                        subtitle: {
+                            display: true,
+                            text: `기준월: ${baseMonth} | 예측 기간: ${simPeriodMonths}개월 | RAG 최신월: ${ragLatestMonth}`,
+                            font: {
+                                size: 12
+                            },
+                            color: '#718096',
+                            padding: { bottom: 10 }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 16
+                            }
+                        },
                         tooltip: {
                             mode: 'index',
                             intersect: false,
                             callbacks: {
+                                title: function(context) {
+                                    const month = context[0].label;
+                                    // 기준월 기준으로 실제값/예측값 구분
+                                    if (month <= baseMonth) {
+                                        return `${month} (학습용 실제값)`;
+                                    } else if (month <= ragLatestMonth) {
+                                        return `${month} (예측값 + 검증용 실제값)`;
+                                    } else {
+                                        return `${month} (예측값)`;
+                                    }
+                                },
                                 label: function(context) {
+                                    if (context.parsed.y === null) return null;
                                     return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
                                 }
+                            }
+                        },
+                        annotation: {
+                            annotations: {
+                                baseMonthLine: {
+                                    type: 'line',
+                                    xMin: baseMonthIdx,
+                                    xMax: baseMonthIdx,
+                                    borderColor: 'rgba(72, 187, 120, 0.7)',
+                                    borderWidth: 2,
+                                    borderDash: [4, 4],
+                                    label: {
+                                        display: true,
+                                        content: '기준월',
+                                        position: 'start',
+                                        backgroundColor: 'rgba(72, 187, 120, 0.8)',
+                                        color: 'white',
+                                        font: { size: 10 }
+                                    }
+                                },
+                                ragLine: isBacktestMode ? {
+                                    type: 'line',
+                                    xMin: ragLatestIdx,
+                                    xMax: ragLatestIdx,
+                                    borderColor: 'rgba(159, 122, 234, 0.5)',
+                                    borderWidth: 2,
+                                    borderDash: [4, 4],
+                                    label: {
+                                        display: true,
+                                        content: 'RAG 최신월',
+                                        position: 'end',
+                                        backgroundColor: 'rgba(159, 122, 234, 0.8)',
+                                        color: 'white',
+                                        font: { size: 10 }
+                                    }
+                                } : null
                             }
                         }
                     },
@@ -4116,18 +5281,24 @@
                             display: true,
                             title: {
                                 display: true,
-                                text: '월'
+                                text: '월 (YYYY-MM)',
+                                font: { weight: 'bold' }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
                             }
                         },
                         y: {
                             display: true,
                             title: {
                                 display: true,
-                                text: '시장점유율 (%)'
+                                text: '시장점유율 (%)',
+                                font: { weight: 'bold' }
                             },
                             beginAtZero: false,
-                            min: Math.min(...predictionData, ...baselineData) - 0.5,
-                            max: Math.max(...predictionData, ...baselineData) + 0.5
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
                         }
                     },
                     interaction: {

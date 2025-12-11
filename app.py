@@ -3,6 +3,7 @@
 """
 from flask import Flask, render_template, jsonify, request
 import json
+import pandas as pd
 from data_loader import ChargingDataLoader
 from data_analyzer import ChargingDataAnalyzer
 from ai_report_generator import AIReportGenerator
@@ -1278,7 +1279,7 @@ def get_gs_kpi():
 
 @app.route('/api/simulation/predict', methods=['POST'])
 def predict_market_share():
-    """시장점유율 시뮬레이션 예측"""
+    """AI 기반 시장점유율 시뮬레이션 예측 (레거시 호환)"""
     try:
         data = request.json
         base_month = data.get('baseMonth')
@@ -1297,22 +1298,270 @@ def predict_market_share():
                 'error': '먼저 데이터를 로드해주세요'
             }), 400
         
-        print(f'🎯 시뮬레이션 시작: 기준월={base_month}, 기간={simulation_months}개월, 추가충전기={additional_chargers}대', flush=True)
+        print(f'\n🎯 AI 시뮬레이션 시작: 기준월={base_month}, 기간={simulation_months}개월, 추가충전기={additional_chargers}대', flush=True)
         
-        # 시뮬레이션 로직 실행
-        from data_analyzer import ChargingDataAnalyzer
-        analyzer = ChargingDataAnalyzer(cache['full_data'])
+        # 새로운 ScenarioSimulator 사용
+        from scenario_simulator import ScenarioSimulator
+        simulator = ScenarioSimulator()
         
-        # 시장점유율 예측 계산
-        prediction_result = analyzer.simulate_market_share_prediction(
+        # AI 예측 실행
+        result = simulator.run_simulation(
             base_month=base_month,
-            simulation_months=simulation_months,
-            additional_chargers=additional_chargers
+            sim_period_months=simulation_months,
+            extra_chargers=additional_chargers,
+            full_data=cache['full_data']
         )
+        
+        if result.get('success'):
+            prediction = result.get('prediction')
+            # 차트 데이터 생성
+            chart_data = simulator.generate_chart_data(prediction)
+            prediction['chart_data'] = chart_data
+            
+            return jsonify({
+                'success': True,
+                'prediction': prediction
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'AI 예측 실패')
+            }), 500
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/scenario-simulator', methods=['POST'])
+def scenario_simulator():
+    """
+    AI Scenario Simulator API
+    
+    RAG 데이터 기반 미래 시장점유율 시뮬레이션
+    
+    모드 1 (charger_to_share): 충전기 추가 → 점유율 예측
+    모드 2 (share_to_charger): 목표 점유율 → 필요 충전기 계산
+    
+    Request Body:
+        - mode: 시뮬레이션 모드 ('charger_to_share' | 'share_to_charger')
+        - baseMonth: 기준월 (YYYY-MM)
+        - simPeriodMonths: 예측 기간 (개월)
+        - extraChargers: 추가 설치 충전기 수 (모드 1)
+        - targetShare: 목표 시장점유율 (모드 2)
+    """
+    try:
+        data = request.json
+        mode = data.get('mode', 'charger_to_share')
+        base_month = data.get('baseMonth')
+        sim_period_months = data.get('simPeriodMonths', 6)
+        
+        # 유효성 검사
+        if not base_month:
+            return jsonify({
+                'success': False,
+                'error': '기준월(baseMonth)을 선택해주세요'
+            }), 400
+        
+        if cache['full_data'] is None:
+            return jsonify({
+                'success': False,
+                'error': '먼저 데이터를 로드해주세요'
+            }), 400
+        
+        # RAG 데이터 범위 확인
+        all_months = sorted(cache['full_data']['snapshot_month'].unique().tolist())
+        earliest_month = all_months[0]
+        rag_latest_month = all_months[-1]
+        
+        # 기준월 유효성 검사
+        if base_month < earliest_month or base_month > rag_latest_month:
+            return jsonify({
+                'success': False,
+                'error': f'기준월은 RAG 데이터 범위 내여야 합니다 ({earliest_month} ~ {rag_latest_month})'
+            }), 400
+        
+        from scenario_simulator import ScenarioSimulator
+        simulator = ScenarioSimulator()
+        
+        # 모드에 따른 처리
+        if mode == 'share_to_charger':
+            # 모드 2: 목표 점유율 → 필요 충전기 계산
+            target_share = data.get('targetShare', 17.0)
+            
+            print(f'\n🎯 목표 점유율 역계산 API 호출', flush=True)
+            print(f'   ├─ baseMonth: {base_month}', flush=True)
+            print(f'   ├─ simPeriodMonths: {sim_period_months}', flush=True)
+            print(f'   ├─ targetShare: {target_share}%', flush=True)
+            print(f'   └─ RAG 범위: {earliest_month} ~ {rag_latest_month}', flush=True)
+            
+            result = simulator.calculate_required_chargers(
+                base_month=base_month,
+                sim_period_months=sim_period_months,
+                target_share=target_share,
+                full_data=cache['full_data']
+            )
+            
+            if result.get('success'):
+                return jsonify(result)
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', '역계산 실패')
+                }), 500
+        
+        else:
+            # 모드 1: 충전기 추가 → 점유율 예측 (기존 로직)
+            extra_chargers = data.get('extraChargers', 0)
+            
+            print(f'\n🎯 AI Scenario Simulator API 호출', flush=True)
+            print(f'   ├─ baseMonth: {base_month}', flush=True)
+            print(f'   ├─ simPeriodMonths: {sim_period_months}', flush=True)
+            print(f'   ├─ extraChargers: {extra_chargers:,}', flush=True)
+            print(f'   └─ RAG 범위: {earliest_month} ~ {rag_latest_month}', flush=True)
+            
+            result = simulator.run_simulation(
+                base_month=base_month,
+                sim_period_months=sim_period_months,
+                extra_chargers=extra_chargers,
+                full_data=cache['full_data']
+            )
+            
+            if result.get('success'):
+                prediction = result.get('prediction')
+                
+                # 차트 데이터 생성
+                chart_data = simulator.generate_chart_data(prediction)
+                
+                # 응답 구성
+                response = {
+                    'success': True,
+                    'meta': prediction.get('meta', {}),
+                    'analysis': prediction.get('analysis', {}),
+                    'baseline_prediction': prediction.get('baseline_prediction', {}),
+                    'scenario_prediction': prediction.get('scenario_prediction', {}),
+                    'insights': prediction.get('insights', {}),
+                    'chart_data': chart_data,
+                    'history': prediction.get('history', []),
+                    'actual_future_data': prediction.get('actual_future_data', []),
+                    'confidence': {
+                        'level': prediction.get('confidence_level', 'MEDIUM'),
+                        'reason': prediction.get('confidence_reason', '')
+                    }
+                }
+                
+                return jsonify(response)
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'AI 시뮬레이션 실패')
+                }), 500
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/scenario-simulator/months', methods=['GET'])
+def get_simulator_months():
+    """시뮬레이터에서 사용 가능한 기준월 목록 조회"""
+    try:
+        if cache['full_data'] is None:
+            return jsonify({
+                'success': False,
+                'error': '먼저 데이터를 로드해주세요'
+            }), 400
+        
+        all_months = sorted(cache['full_data']['snapshot_month'].unique().tolist())
         
         return jsonify({
             'success': True,
-            'prediction': prediction_result
+            'months': all_months,
+            'earliest_month': all_months[0] if all_months else None,
+            'latest_month': all_months[-1] if all_months else None,
+            'total_months': len(all_months)
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/gs-chargebi-history', methods=['GET'])
+def get_gs_chargebi_history():
+    """GS차지비 월별 점유율 히스토리 조회 (시뮬레이터 모드 2용)"""
+    try:
+        if cache['full_data'] is None:
+            return jsonify({
+                'success': False,
+                'error': '데이터가 로드되지 않았습니다'
+            }), 400
+        
+        # GS차지비 데이터 추출
+        gs_data = cache['full_data'][cache['full_data']['CPO명'] == 'GS차지비'].copy()
+        gs_data = gs_data.sort_values('snapshot_month')
+        
+        history = []
+        for _, row in gs_data.iterrows():
+            market_share = row.get('시장점유율', 0)
+            if pd.notna(market_share) and market_share < 1:
+                market_share = market_share * 100
+            
+            history.append({
+                'month': row.get('snapshot_month'),
+                'market_share': round(float(market_share), 2) if pd.notna(market_share) else 0,
+                'total_chargers': int(row.get('총충전기', 0)) if pd.notna(row.get('총충전기')) else 0,
+                'rank': int(row.get('순위', 0)) if pd.notna(row.get('순위')) else None
+            })
+        
+        return jsonify({
+            'success': True,
+            'history': history
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/scenario-simulator/reliability-config', methods=['GET'])
+def get_simulator_reliability_config():
+    """
+    시뮬레이터 신뢰도 기반 설정 조회
+    
+    백테스트 결과를 기반으로 신뢰도 있는 예측 범위를 반환합니다.
+    - 기준 시점: RAG 최신 데이터 월로 고정
+    - 최대 예측 기간: 백테스트 결과 기반 (현재 6개월)
+    - 기간별 오차 통계 제공
+    - 목표 점유율 범위 (신뢰도 기반)
+    """
+    try:
+        if cache['full_data'] is None:
+            return jsonify({
+                'success': False,
+                'error': '먼저 데이터를 로드해주세요'
+            }), 400
+        
+        from scenario_simulator import ScenarioSimulator
+        
+        # 신뢰도 설정 조회 (GS차지비 정보 포함)
+        reliability_config = ScenarioSimulator.get_reliability_config(cache['full_data'])
+        
+        return jsonify({
+            'success': True,
+            **reliability_config
         })
     
     except Exception as e:
@@ -1322,6 +1571,7 @@ def predict_market_share():
             'success': False,
             'error': str(e)
         }), 500
+
 
 def initialize_data():
     """앱 시작 시 자동으로 모든 데이터 로드"""

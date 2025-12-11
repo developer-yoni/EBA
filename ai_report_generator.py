@@ -1454,3 +1454,284 @@ GS차지비 {target_month} 포지션:
         
         context = self.retrieve_from_kb('GS차지비 경쟁력 전략 분석')
         return self.invoke_bedrock(prompt, context)
+
+    def generate_ai_simulation(self, base_month, simulation_months, additional_chargers, full_data, target_data):
+        """AI 기반 시장점유율 시뮬레이션 예측 - RAG 데이터 기반"""
+        import time
+        print(f'\n🎯 AI 시뮬레이션 예측 시작 (RAG 기반)', flush=True)
+        print(f'   ├─ 기준월: {base_month}', flush=True)
+        print(f'   ├─ 예측 기간: {simulation_months}개월', flush=True)
+        print(f'   └─ 추가 충전기: {additional_chargers:,}대', flush=True)
+        
+        start_time = time.time()
+        
+        # 1. RAG - Knowledge Base에서 모든 과거 데이터 검색
+        print(f'   📚 RAG: Knowledge Base에서 과거 데이터 검색 중...', flush=True)
+        
+        # 여러 쿼리로 RAG 데이터 수집
+        rag_queries = [
+            f'충전인프라 현황 {base_month} GS차지비 시장점유율 충전기',
+            f'전기차 충전사업자 순위 충전소 현황 {base_month}',
+            f'GS차지비 충전기 증감 추이 시장점유율 변화',
+            f'충전인프라 시장 성장률 경쟁사 분석'
+        ]
+        
+        rag_context_parts = []
+        for query in rag_queries:
+            ctx = self.retrieve_from_kb(query)
+            if ctx:
+                rag_context_parts.append(ctx)
+        
+        rag_context = "\n\n---\n\n".join(rag_context_parts) if rag_context_parts else ""
+        print(f'   📚 RAG 컨텍스트 수집 완료: {len(rag_context):,}자', flush=True)
+        
+        # 2. 메모리 데이터에서 모든 과거 데이터 수집 (기준월 이전 모든 데이터)
+        all_months = sorted(full_data['snapshot_month'].unique().tolist())
+        available_months = [m for m in all_months if m <= base_month]
+        
+        print(f'   📅 분석 기간: {available_months[0]} ~ {available_months[-1]} ({len(available_months)}개월)', flush=True)
+        
+        # 3. GS차지비 전체 히스토리 데이터 추출
+        gs_data = full_data[full_data['CPO명'] == 'GS차지비'].copy()
+        gs_history = gs_data[gs_data['snapshot_month'].isin(available_months)].sort_values('snapshot_month')
+        
+        # GS차지비 월별 추이 데이터
+        gs_trend_data = []
+        for _, row in gs_history.iterrows():
+            gs_trend_data.append({
+                'month': row.get('snapshot_month'),
+                'rank': int(row.get('순위', 0)) if pd.notna(row.get('순위')) else None,
+                'stations': int(row.get('충전소수', 0)) if pd.notna(row.get('충전소수')) else None,
+                'slow_chargers': int(row.get('완속충전기', 0)) if pd.notna(row.get('완속충전기')) else None,
+                'fast_chargers': int(row.get('급속충전기', 0)) if pd.notna(row.get('급속충전기')) else None,
+                'total_chargers': int(row.get('총충전기', 0)) if pd.notna(row.get('총충전기')) else None,
+                'market_share': float(row.get('시장점유율', 0)) * 100 if pd.notna(row.get('시장점유율')) and row.get('시장점유율') < 1 else float(row.get('시장점유율', 0)) if pd.notna(row.get('시장점유율')) else None,
+                'total_change': int(row.get('총증감', 0)) if pd.notna(row.get('총증감')) else None
+            })
+        
+        # 4. 전체 시장 데이터 추출
+        market_data = []
+        for month in available_months:
+            month_data = full_data[full_data['snapshot_month'] == month]
+            if len(month_data) > 0:
+                total_chargers = month_data['총충전기'].sum()
+                total_cpos = len(month_data[month_data['총충전기'] > 0])
+                market_data.append({
+                    'month': month,
+                    'total_chargers': int(total_chargers),
+                    'total_cpos': int(total_cpos)
+                })
+        
+        # 5. 경쟁사 현황 (상위 10개사)
+        current_data = full_data[full_data['snapshot_month'] == base_month]
+        top10 = current_data.nlargest(10, '총충전기') if '총충전기' in current_data.columns else current_data.head(10)
+        
+        competitor_info = []
+        for _, row in top10.iterrows():
+            competitor_info.append({
+                'name': row.get('CPO명', 'N/A'),
+                'rank': int(row.get('순위', 0)) if pd.notna(row.get('순위')) else None,
+                'total_chargers': int(row.get('총충전기', 0)) if pd.notna(row.get('총충전기')) else None,
+                'market_share': float(row.get('시장점유율', 0)) * 100 if pd.notna(row.get('시장점유율')) and row.get('시장점유율') < 1 else float(row.get('시장점유율', 0)) if pd.notna(row.get('시장점유율')) else None,
+                'total_change': int(row.get('총증감', 0)) if pd.notna(row.get('총증감')) else None
+            })
+        
+        # 6. 미래 월 계산
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
+        base_date = datetime.strptime(base_month, '%Y-%m')
+        future_months = []
+        for i in range(1, simulation_months + 1):
+            future_date = base_date + relativedelta(months=i)
+            future_months.append(future_date.strftime('%Y-%m'))
+        
+        # 7. AI 프롬프트 생성
+        gs_trend_str = "\n".join([
+            f"- {d['month']}: 순위 {d['rank']}위, 총충전기 {d['total_chargers']:,}기, 시장점유율 {d['market_share']:.2f}%, 월증감 {d['total_change']:+,}기"
+            for d in gs_trend_data if d['total_chargers']
+        ])
+        
+        market_trend_str = "\n".join([
+            f"- {d['month']}: 전체 충전기 {d['total_chargers']:,}기, CPO 수 {d['total_cpos']}개"
+            for d in market_data
+        ])
+        
+        competitor_str = "\n".join([
+            f"- {c['name']}: 순위 {c['rank']}위, 총충전기 {c['total_chargers']:,}기, 시장점유율 {c['market_share']:.2f}%, 월증감 {c['total_change']:+,}기"
+            for c in competitor_info if c['total_chargers']
+        ])
+        
+        # 현재 GS차지비 상태
+        current_gs = gs_trend_data[-1] if gs_trend_data else {}
+        
+        # 미래 월 목록
+        future_months_str = ", ".join(future_months)
+        
+        prompt = f"""당신은 한국 전기차 충전 인프라 시장 분석 전문가입니다.
+아래 제공된 RAG(검색 증강 생성) 데이터와 과거 실적 데이터를 기반으로 GS차지비의 미래 시장점유율을 예측해주세요.
+
+## 📊 RAG 참조 데이터 (Knowledge Base에서 검색된 실제 데이터)
+{rag_context if rag_context else "RAG 데이터 없음 - 아래 과거 실적 데이터만 사용"}
+
+---
+
+## 🎯 시뮬레이션 조건
+- 기준월: {base_month}
+- 예측 기간: {simulation_months}개월
+- 예측 대상 월: {future_months_str}
+- GS차지비 추가 설치 계획: {additional_chargers:,}대 (예측 기간 동안 균등 배분, 월 {additional_chargers // simulation_months if simulation_months > 0 else 0:,}대)
+
+## 📈 GS차지비 현재 상태 ({base_month})
+- 순위: {current_gs.get('rank', 'N/A')}위
+- 총충전기: {current_gs.get('total_chargers', 0):,}기
+- 시장점유율: {current_gs.get('market_share', 0):.2f}%
+
+## 📅 GS차지비 전체 과거 실적 ({len(gs_trend_data)}개월)
+{gs_trend_str}
+
+## 🌐 전체 시장 추이
+{market_trend_str}
+
+## 🏆 경쟁사 현황 (상위 10개사, {base_month} 기준)
+{competitor_str}
+
+---
+
+## 🤖 AI 분석 요청
+
+위의 RAG 데이터와 과거 실적을 종합 분석하여 다음을 예측해주세요:
+
+1. **과거 데이터 패턴 분석**
+   - 시장 전체 월평균 성장률 계산 (과거 데이터 기반)
+   - GS차지비 월평균 성장률 계산 (과거 데이터 기반)
+   - 계절성, 트렌드 등 패턴 식별
+
+2. **미래 예측 ({simulation_months}개월)**
+   - 기준선 시나리오: 현재 추세 유지 시 각 월별 시장점유율 예측
+   - 투자 시나리오: {additional_chargers:,}대 추가 설치 시 각 월별 시장점유율 예측
+
+3. **전략적 인사이트**
+   - 투자 효과 분석
+   - 리스크 요인
+   - 권고사항
+
+## 📋 응답 형식 (반드시 아래 JSON 형식으로만 응답)
+
+```json
+{{
+    "analysis": {{
+        "market_monthly_growth_rate": 시장 월평균 성장률 숫자 (예: 1.5),
+        "gs_monthly_growth_rate": GS차지비 월평균 성장률 숫자 (예: 0.8),
+        "market_trend": "시장 트렌드 분석 요약 (2-3문장)",
+        "competition_analysis": "경쟁 환경 분석 (2-3문장)"
+    }},
+    "current_status": {{
+        "market_share": {current_gs.get('market_share', 0):.2f},
+        "total_chargers": {current_gs.get('total_chargers', 0)},
+        "rank": {current_gs.get('rank', 0)}
+    }},
+    "baseline_prediction": {{
+        "final_market_share": 최종 시장점유율 숫자,
+        "final_total_chargers": 최종 충전기 수 숫자,
+        "monthly_predictions": [
+            {{"month": "{future_months[0] if future_months else 'YYYY-MM'}", "market_share": 숫자, "total_chargers": 숫자}},
+            ... (총 {simulation_months}개월 모두 포함)
+        ]
+    }},
+    "investment_prediction": {{
+        "final_market_share": 최종 시장점유율 숫자,
+        "final_total_chargers": 최종 충전기 수 숫자,
+        "market_share_increase": 기준선 대비 증가분 숫자,
+        "monthly_predictions": [
+            {{"month": "{future_months[0] if future_months else 'YYYY-MM'}", "market_share": 숫자, "total_chargers": 숫자}},
+            ... (총 {simulation_months}개월 모두 포함)
+        ]
+    }},
+    "insights": {{
+        "key_findings": ["주요 발견 1", "주요 발견 2", "주요 발견 3"],
+        "risks": ["리스크 1", "리스크 2"],
+        "recommendations": ["권고사항 1", "권고사항 2", "권고사항 3"]
+    }},
+    "confidence_level": "HIGH 또는 MEDIUM 또는 LOW",
+    "confidence_reason": "신뢰도 판단 근거 (1-2문장)"
+}}
+```
+
+**⚠️ 중요 지침:**
+1. 반드시 제공된 RAG 데이터와 과거 실적만 사용하여 분석하세요
+2. monthly_predictions는 정확히 {simulation_months}개월 모두 포함해야 합니다
+3. 시장점유율은 소수점 2자리까지 표시 (예: 16.25)
+4. JSON 형식 외의 텍스트는 절대 포함하지 마세요
+5. 모든 숫자는 따옴표 없이 숫자 타입으로 작성하세요
+"""
+        
+        # 8. Bedrock 호출
+        print(f'   🤖 AI 예측 모델 호출 중... (Bedrock Claude Sonnet 4.5)', flush=True)
+        
+        try:
+            payload = {
+                'anthropic_version': Config.ANTHROPIC_VERSION,
+                'max_tokens': 8192,
+                'temperature': 0.2,
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': prompt
+                    }
+                ]
+            }
+            
+            response = self.bedrock_client.invoke_model(
+                modelId=Config.MODEL_ID,
+                contentType='application/json',
+                accept='application/json',
+                body=json.dumps(payload)
+            )
+            
+            response_body = json.loads(response['body'].read())
+            result_text = response_body['content'][0]['text']
+            
+            elapsed_time = time.time() - start_time
+            print(f'   ✅ AI 예측 완료 (⏱️ {elapsed_time:.2f}초)', flush=True)
+            
+            # 8. JSON 파싱
+            # JSON 블록 추출
+            import re
+            json_match = re.search(r'```json\s*([\s\S]*?)\s*```', result_text)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                # JSON 블록이 없으면 전체 텍스트를 JSON으로 파싱 시도
+                json_str = result_text
+            
+            prediction_result = json.loads(json_str)
+            prediction_result['bedrock_time'] = round(elapsed_time, 2)
+            prediction_result['total_time'] = round(elapsed_time, 2)
+            prediction_result['simulation_months'] = simulation_months
+            prediction_result['additional_chargers'] = additional_chargers
+            prediction_result['base_month'] = base_month
+            
+            # 히스토리 데이터 추가 (차트용)
+            prediction_result['history'] = gs_trend_data
+            
+            return {
+                'success': True,
+                'prediction': prediction_result
+            }
+            
+        except json.JSONDecodeError as e:
+            print(f'   ❌ JSON 파싱 오류: {e}', flush=True)
+            print(f'   📝 원본 응답: {result_text[:500]}...', flush=True)
+            return {
+                'success': False,
+                'error': f'AI 응답 파싱 오류: {str(e)}',
+                'raw_response': result_text
+            }
+        except Exception as e:
+            print(f'   ❌ AI 예측 오류: {e}', flush=True)
+            import traceback
+            traceback.print_exc()
+            return {
+                'success': False,
+                'error': str(e)
+            }
