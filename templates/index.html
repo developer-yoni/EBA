@@ -4615,34 +4615,6 @@
             const feasibility = targetAnalysis.feasibility || 'UNKNOWN';
             const baselineShare = targetAnalysis.baseline_share || currentShare;
             
-            // 목표 달성 가능성에 따른 색상 및 텍스트
-            let feasibilityColor, feasibilityText;
-            switch(feasibility) {
-                case 'ALREADY_ACHIEVED':
-                    feasibilityColor = 'var(--success)';
-                    feasibilityText = '✅ 이미 달성';
-                    break;
-                case 'TREND_ACHIEVABLE':
-                    feasibilityColor = 'var(--success)';
-                    feasibilityText = '📈 추세로 달성';
-                    break;
-                case 'ACHIEVABLE':
-                    feasibilityColor = 'var(--success)';
-                    feasibilityText = '달성 가능';
-                    break;
-                case 'CHALLENGING':
-                    feasibilityColor = 'var(--warning)';
-                    feasibilityText = '도전적';
-                    break;
-                case 'DIFFICULT':
-                    feasibilityColor = 'var(--error)';
-                    feasibilityText = '달성 어려움';
-                    break;
-                default:
-                    feasibilityColor = 'var(--text-muted)';
-                    feasibilityText = '분석 중';
-            }
-            
             // ALREADY_ACHIEVED 또는 TREND_ACHIEVABLE인 경우 특별 처리
             const isAlreadyAchieved = feasibility === 'ALREADY_ACHIEVED' || feasibility === 'TREND_ACHIEVABLE';
             
@@ -4661,38 +4633,24 @@
                     <div style="font-size: 12px; color: var(--text-muted);">추세 유지 시 예상 (${simPeriodMonths}개월 후)</div>
                 </div>
                 
-                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center; border: 2px solid var(--warning);">
-                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--warning); margin-bottom: 4px;">
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: #ed8936; margin-bottom: 4px;">
                         ${targetShare.toFixed(2)}%
                     </div>
                     <div style="font-size: 12px; color: var(--text-muted);">목표 시장점유율</div>
-                    <div style="font-size: 11px; color: var(--warning); margin-top: 4px;">
+                    <div style="font-size: 11px; color: ${(targetShare - currentShare) >= 0 ? 'var(--success)' : 'var(--error)'}; margin-top: 4px;">
                         ${(targetShare - currentShare) >= 0 ? '+' : ''}${(targetShare - currentShare).toFixed(2)}%p 필요
                     </div>
                 </div>
                 
-                <div style="background: ${isAlreadyAchieved ? 'linear-gradient(135deg, rgba(72, 187, 120, 0.1), rgba(72, 187, 120, 0.2))' : 'linear-gradient(135deg, rgba(237, 137, 54, 0.1), rgba(237, 137, 54, 0.2))'}; padding: 16px; border-radius: 8px; text-align: center; border: 2px solid ${isAlreadyAchieved ? 'var(--success)' : '#ed8936'};">
-                    <div style="font-size: 28px; font-weight: var(--fw-bold); color: ${isAlreadyAchieved ? 'var(--success)' : '#ed8936'}; margin-bottom: 4px;">
+                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: var(--fw-bold); color: var(--success); margin-bottom: 4px;">
                         ${requiredChargers.toLocaleString()}대
                     </div>
                     <div style="font-size: 12px; color: var(--text-muted);">필요 추가 충전기 (총)</div>
-                    <div style="font-size: 14px; color: ${isAlreadyAchieved ? 'var(--success)' : '#ed8936'}; margin-top: 8px; font-weight: var(--fw-semibold);">
-                        ${isAlreadyAchieved ? '✅ 추가 설치 불필요' : `월평균 ${monthlyChargers.toLocaleString()}대 설치 필요`}
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                        ${isAlreadyAchieved ? '추가 설치 불필요' : `월평균 ${monthlyChargers.toLocaleString()}대`}
                     </div>
-                </div>
-                
-                <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; text-align: center; grid-column: span 2;">
-                    <div style="display: flex; justify-content: center; align-items: center; gap: 12px;">
-                        <span style="font-size: 14px; color: var(--text-muted);">목표 달성 가능성:</span>
-                        <span style="font-size: 18px; font-weight: var(--fw-bold); color: ${feasibilityColor}; padding: 4px 16px; border-radius: 20px; background: ${feasibilityColor}20;">
-                            ${feasibilityText}
-                        </span>
-                    </div>
-                    ${targetAnalysis.feasibility_reason ? `
-                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
-                        ${targetAnalysis.feasibility_reason}
-                    </p>
-                    ` : ''}
                 </div>
             `;
             
