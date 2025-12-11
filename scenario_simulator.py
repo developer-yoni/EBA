@@ -845,6 +845,113 @@ class ScenarioSimulator:
         
         return distribution
     
+    def _calculate_ml_based_prediction(
+        self,
+        base_month: str,
+        sim_period_months: int,
+        extra_chargers: int,
+        gs_history: list,
+        market_history: list,
+        ml_analysis: dict,
+        charger_distribution: list = None
+    ) -> dict:
+        """
+        ML 기반 예측 계산 (시뮬레이터 1, 2 공통 로직)
+        
+        핵심 공식 (ratio 방식):
+        - baseline_share = baseline_gs / baseline_market * 100
+        - scenario_share = (baseline_gs + extra) / (baseline_market + extra) * 100
+        
+        이 공식은 calculate_required_chargers와 동일하게 사용되어 일관성 보장
+        """
+        lr_stats = ml_analysis.get('linear_regression', {})
+        share_slope = lr_stats.get('share_slope', 0)
+        charger_slope = lr_stats.get('charger_slope', 0)
+        market_slope = lr_stats.get('market_slope', 0)
+        
+        # 현재 상태
+        current_gs = gs_history[-1] if gs_history else {}
+        current_share = current_gs.get('market_share', 0)
+        current_chargers = current_gs.get('total_chargers', 0)
+        current_market = market_history[-1]['total_chargers'] if market_history else 0
+        
+        # 월별 예측 데이터 생성
+        baseline_predictions = []
+        scenario_predictions = []
+        
+        base_date = datetime.strptime(base_month, '%Y-%m')
+        
+        # 균등 분배 (charger_distribution이 없는 경우)
+        if not charger_distribution:
+            monthly_extra = extra_chargers / sim_period_months if sim_period_months > 0 else 0
+            charger_distribution = [int(monthly_extra)] * sim_period_months
+            # 총합 조정
+            diff = extra_chargers - sum(charger_distribution)
+            if diff != 0 and len(charger_distribution) > 0:
+                charger_distribution[-1] += diff
+        
+        cumulative_extra = 0
+        for i in range(1, sim_period_months + 1):
+            month_date = base_date + relativedelta(months=i)
+            month_str = month_date.strftime('%Y-%m')
+            
+            # Baseline 예측 (ML 선형회귀 기반)
+            # GS 충전기와 시장 전체를 각각 예측 후 ratio 계산
+            bl_chargers = current_chargers + (charger_slope * i)
+            bl_market = current_market + (market_slope * i)
+            bl_share = (bl_chargers / bl_market) * 100 if bl_market > 0 else 0
+            
+            baseline_predictions.append({
+                'month': month_str,
+                'market_share': round(bl_share, 2),
+                'total_chargers': int(bl_chargers),
+                'market_total': int(bl_market),
+                'is_actual': False
+            })
+            
+            # 시나리오 예측 (추가 충전기 반영)
+            # 핵심: GS가 추가 설치하면 시장 전체도 그만큼 증가
+            cumulative_extra += charger_distribution[i-1] if i <= len(charger_distribution) else 0
+            sc_chargers = bl_chargers + cumulative_extra
+            sc_market = bl_market + cumulative_extra  # 시장 전체도 증가
+            sc_share = (sc_chargers / sc_market) * 100 if sc_market > 0 else 0
+            
+            scenario_predictions.append({
+                'month': month_str,
+                'market_share': round(sc_share, 2),
+                'total_chargers': int(sc_chargers),
+                'market_total': int(sc_market),
+                'added_chargers': int(cumulative_extra),
+                'is_actual': False
+            })
+        
+        # 최종 결과
+        final_baseline = baseline_predictions[-1] if baseline_predictions else {}
+        final_scenario = scenario_predictions[-1] if scenario_predictions else {}
+        
+        return {
+            'baseline_prediction': {
+                'description': '현재 추세 기준 예측 (추가 설치 없음)',
+                'final_market_share': final_baseline.get('market_share', 0),
+                'final_total_chargers': final_baseline.get('total_chargers', 0),
+                'monthly_predictions': baseline_predictions
+            },
+            'scenario_prediction': {
+                'description': f'시나리오 예측 ({extra_chargers:,}대 추가 설치)',
+                'extra_chargers': extra_chargers,
+                'charger_distribution': charger_distribution,
+                'final_market_share': final_scenario.get('market_share', 0),
+                'final_total_chargers': final_scenario.get('total_chargers', 0),
+                'market_share_increase': round(final_scenario.get('market_share', 0) - final_baseline.get('market_share', 0), 2),
+                'monthly_predictions': scenario_predictions
+            },
+            'current_state': {
+                'market_share': current_share,
+                'total_chargers': current_chargers,
+                'market_total': current_market
+            }
+        }
+    
     def run_simulation(
         self,
         base_month: str,
@@ -902,10 +1009,10 @@ class ScenarioSimulator:
         if actual_future_data:
             print(f'📊 검증용 실제값: {len(actual_future_data)}개월 데이터 존재', flush=True)
         
-        # 5. ML 기반 데이터 분석 (신뢰도 향상)
+        # 6. ML 기반 데이터 분석 (신뢰도 향상)
         ml_analysis = self.perform_ml_analysis(gs_history, market_history)
         
-        # 6. 충전기 분배 전략 계산
+        # 7. 충전기 분배 전략 계산
         charger_distribution = self.calculate_scenario_distribution(extra_chargers, sim_period_months, ml_analysis)
         print(f'   └─ 충전기 분배: {charger_distribution} (총 {sum(charger_distribution):,}대)', flush=True)
         
@@ -957,8 +1064,25 @@ class ScenarioSimulator:
                 'total_change': int(row.get('총증감', 0)) if pd.notna(row.get('총증감')) else 0
             })
         
-        # 10. AI 프롬프트 생성 및 Bedrock 호출 (ML 분석 결과 포함)
-        print(f'🤖 AI 예측 모델 호출 중 (Chain of Thought 추론)...', flush=True)
+        # 8. ML 기반 예측 계산 (핵심 로직 - calculate_required_chargers와 동일한 공식 사용)
+        print(f'📊 ML 기반 예측 계산 중...', flush=True)
+        ml_prediction = self._calculate_ml_based_prediction(
+            base_month=base_month,
+            sim_period_months=sim_period_months,
+            extra_chargers=extra_chargers,
+            gs_history=gs_history,
+            market_history=market_history,
+            ml_analysis=ml_analysis,
+            charger_distribution=charger_distribution
+        )
+        
+        baseline_final = ml_prediction['baseline_prediction']['final_market_share']
+        scenario_final = ml_prediction['scenario_prediction']['final_market_share']
+        share_increase = ml_prediction['scenario_prediction']['market_share_increase']
+        print(f'   └─ ML 예측 완료: baseline {baseline_final:.2f}% → scenario {scenario_final:.2f}% (+{share_increase:.2f}%p)', flush=True)
+        
+        # 9. AI 프롬프트 생성 및 Bedrock 호출 (인사이트 생성용)
+        print(f'🤖 AI 인사이트 생성 중 (Chain of Thought 추론)...', flush=True)
         
         prediction_result = self._invoke_bedrock_prediction(
             base_month=base_month,
@@ -978,45 +1102,75 @@ class ScenarioSimulator:
         elapsed_time = time.time() - start_time
         print(f'✅ AI 시뮬레이션 완료 (⏱️ {elapsed_time:.2f}초)', flush=True)
         
+        # ML 기반 예측값을 기본으로 사용하고, Bedrock 인사이트만 추가
+        result = {
+            'baseline_prediction': ml_prediction['baseline_prediction'],
+            'scenario_prediction': ml_prediction['scenario_prediction'],
+            'analysis': {
+                'current_market_share': ml_prediction['current_state']['market_share'],
+                'current_chargers': ml_prediction['current_state']['total_chargers'],
+                'current_market_total': ml_prediction['current_state']['market_total']
+            }
+        }
+        
+        # Bedrock 인사이트 병합 (성공 시)
         if prediction_result.get('success'):
-            result = prediction_result.get('prediction', {})
-            
-            # LOW 신뢰도 보호 로직 적용
-            confidence_level = ml_analysis.get('confidence', {}).get('level', 'MEDIUM')
-            result = self.apply_confidence_protection(result, confidence_level, extra_chargers)
-            
-            # 메타 정보 추가
-            result['meta'] = {
-                'base_month': base_month,
-                'sim_period_months': sim_period_months,
-                'extra_chargers': extra_chargers,
-                'charger_distribution': charger_distribution,
-                'earliest_month': earliest_month,
-                'rag_latest_month': rag_latest_month,
-                'prediction_end_month': future_info['end_month'],
-                'total_time': round(elapsed_time, 2),
-                # 백테스트 기반 통계 추가
-                'backtest_stats': self._get_backtest_stats(sim_period_months),
-                'recommended_max_period': ml_analysis.get('recommended_max_period', 6),
-                'confidence_warning': sim_period_months > ml_analysis.get('recommended_max_period', 6),
-                # 검증 모드 정보 (기준월이 과거인 경우)
-                'is_backtest_mode': len(actual_future_data) > 0,
-                'verifiable_months': len(actual_future_data)
-            }
-            result['history'] = gs_history  # 기준월까지의 학습용 데이터
-            result['market_history'] = market_history
-            result['ml_analysis'] = ml_analysis
-            
-            # 검증용 실제값 추가 (기준월이 과거인 경우)
-            if actual_future_data:
-                result['actual_future_data'] = actual_future_data
-            
-            return {
-                'success': True,
-                'prediction': result
-            }
+            ai_result = prediction_result.get('prediction', {})
+            result['insights'] = ai_result.get('insights', {})
+            result['reasoning'] = ai_result.get('reasoning', {})
+            result['analysis'].update({
+                'market_monthly_growth_rate': ai_result.get('analysis', {}).get('market_monthly_growth_rate', 0),
+                'gs_monthly_growth_rate': ai_result.get('analysis', {}).get('gs_monthly_growth_rate', 0),
+                'market_trend_summary': ai_result.get('analysis', {}).get('market_trend_summary', ''),
+                'gs_trend_summary': ai_result.get('analysis', {}).get('gs_trend_summary', '')
+            })
         else:
-            return prediction_result
+            # Bedrock 실패 시 기본 인사이트 생성
+            lr_stats = ml_analysis.get('linear_regression', {})
+            result['insights'] = {
+                'market_analysis': f'현재 GS차지비 점유율은 {ml_prediction["current_state"]["market_share"]:.2f}%입니다.',
+                'future_prediction_summary': f'{sim_period_months}개월 후 baseline {baseline_final:.2f}%, 시나리오 {scenario_final:.2f}%로 예측됩니다.',
+                'key_findings': [
+                    f'추가 충전기 {extra_chargers:,}대 설치 시 점유율 {share_increase:+.2f}%p 증가 예상',
+                    f'월평균 점유율 변화율: {lr_stats.get("share_slope", 0):.4f}%p/월'
+                ],
+                'recommendations': ['ML 기반 예측 결과입니다.']
+            }
+        
+        # LOW 신뢰도 보호 로직 적용
+        confidence_level = ml_analysis.get('confidence', {}).get('level', 'MEDIUM')
+        result = self.apply_confidence_protection(result, confidence_level, extra_chargers)
+        
+        # 메타 정보 추가
+        result['meta'] = {
+            'base_month': base_month,
+            'sim_period_months': sim_period_months,
+            'extra_chargers': extra_chargers,
+            'charger_distribution': charger_distribution,
+            'earliest_month': earliest_month,
+            'rag_latest_month': rag_latest_month,
+            'prediction_end_month': future_info['end_month'],
+            'total_time': round(elapsed_time, 2),
+            # 백테스트 기반 통계 추가
+            'backtest_stats': self._get_backtest_stats(sim_period_months),
+            'recommended_max_period': ml_analysis.get('recommended_max_period', 6),
+            'confidence_warning': sim_period_months > ml_analysis.get('recommended_max_period', 6),
+            # 검증 모드 정보 (기준월이 과거인 경우)
+            'is_backtest_mode': len(actual_future_data) > 0,
+            'verifiable_months': len(actual_future_data)
+        }
+        result['history'] = gs_history  # 기준월까지의 학습용 데이터
+        result['market_history'] = market_history
+        result['ml_analysis'] = ml_analysis
+        
+        # 검증용 실제값 추가 (기준월이 과거인 경우)
+        if actual_future_data:
+            result['actual_future_data'] = actual_future_data
+        
+        return {
+            'success': True,
+            'prediction': result
+        }
     
     def calculate_required_chargers(
         self,
@@ -1083,23 +1237,25 @@ class ScenarioSimulator:
         # 목표점유율 = (현재GS충전기 + 추가충전기) / 미래시장전체충전기 * 100
         # 추가충전기 = (목표점유율 * 미래시장전체충전기 / 100) - 현재GS충전기
         
-        # baseline 예측 (추가 설치 없이 현재 추세 유지)
-        share_slope = lr_stats.get('share_slope', 0)
-        baseline_share = current_share + (share_slope * sim_period_months)
-        baseline_chargers = current_chargers + (lr_stats.get('charger_slope', 0) * sim_period_months)
+        # 6. baseline 예측 (ratio 방식 - run_simulation과 동일한 공식)
+        # 핵심: 점유율을 직접 예측하지 않고, GS충전기/시장전체 각각 예측 후 ratio 계산
+        charger_slope = lr_stats.get('charger_slope', 0)
+        share_slope = lr_stats.get('share_slope', 0)  # 참고용
+        
+        # baseline 예측값 (sim_period_months 후)
+        baseline_gs_chargers = current_chargers + (charger_slope * sim_period_months)
+        baseline_market_chargers = current_market + (market_slope * sim_period_months)
+        
+        # ratio 방식으로 baseline 점유율 계산 (run_simulation과 동일)
+        baseline_share = (baseline_gs_chargers / baseline_market_chargers) * 100 if baseline_market_chargers > 0 else 0
         
         # 월평균 설치 필요량 (과거 평균)
-        avg_monthly_increase = lr_stats.get('charger_slope', 0)
+        avg_monthly_increase = charger_slope
         
-        # 6. 목표 점유율 달성에 필요한 충전기 수 계산 (수정된 공식)
+        # 7. 목표 점유율 달성에 필요한 충전기 수 계산 (수정된 공식)
         # 핵심: GS가 추가 설치하면 시장 전체도 그만큼 증가
         # target_share = (baseline_gs + extra) / (baseline_market + extra) * 100
         # 정리: extra = (target_share * baseline_market - 100 * baseline_gs) / (100 - target_share)
-        
-        # baseline 예측값 (sim_period_months 후)
-        charger_slope = lr_stats.get('charger_slope', 0)
-        baseline_gs_chargers = current_chargers + (charger_slope * sim_period_months)
-        baseline_market_chargers = current_market + (market_slope * sim_period_months)
         
         # 수정된 공식으로 필요 충전기 계산
         if target_share >= 100:
@@ -1149,7 +1305,7 @@ class ScenarioSimulator:
             
             print(f'   └─ 목표 달성에 {required_extra_chargers:,}대 추가 설치 필요 (baseline {baseline_share:.2f}% → 목표 {target_share:.2f}%)', flush=True)
         
-        # 8. 월별 예측 데이터 생성
+        # 9. 월별 예측 데이터 생성 (ratio 방식 - run_simulation과 동일)
         baseline_predictions = []
         scenario_predictions = []
         
@@ -1161,25 +1317,28 @@ class ScenarioSimulator:
             month_date = base_date + relativedelta(months=i)
             month_str = month_date.strftime('%Y-%m')
             
-            # Baseline 예측
-            bl_share = current_share + (share_slope * i)
-            bl_chargers = current_chargers + (lr_stats.get('charger_slope', 0) * i)
+            # Baseline 예측 (ratio 방식)
+            bl_chargers = current_chargers + (charger_slope * i)
+            bl_market = current_market + (market_slope * i)
+            bl_share = (bl_chargers / bl_market) * 100 if bl_market > 0 else 0
             baseline_predictions.append({
                 'month': month_str,
                 'market_share': round(bl_share, 2),
-                'total_chargers': int(bl_chargers)
+                'total_chargers': int(bl_chargers),
+                'market_total': int(bl_market)
             })
             
-            # 시나리오 예측 (목표 달성 경로)
+            # 시나리오 예측 (목표 달성 경로 - ratio 방식)
             cumulative_extra += monthly_extra
             sc_chargers = bl_chargers + cumulative_extra
-            # 시장 전체도 증가하므로 점유율 재계산
-            month_market = current_market + (market_slope * i)
-            sc_share = (sc_chargers / month_market) * 100 if month_market > 0 else 0
+            # 핵심: GS가 추가 설치하면 시장 전체도 그만큼 증가
+            sc_market = bl_market + cumulative_extra
+            sc_share = (sc_chargers / sc_market) * 100 if sc_market > 0 else 0
             scenario_predictions.append({
                 'month': month_str,
                 'market_share': round(sc_share, 2),
                 'total_chargers': int(sc_chargers),
+                'market_total': int(sc_market),
                 'added_chargers': int(cumulative_extra)
             })
         
