@@ -136,9 +136,25 @@ class BacktestSimulator:
         share_mean = np.mean(gs_shares)
         share_std = np.std(gs_shares)
         
-        # 신뢰도 점수
-        data_consistency = max(0, 1 - share_std / share_mean) if share_mean > 0 else 0
-        confidence_score = (share_r2 * 0.4 + charger_r2 * 0.3 + data_consistency * 0.3) * 100
+        # 신뢰도 점수 (ScenarioSimulator와 동일한 로직 사용)
+        # 데이터 양 점수 (3개월=30점, 12개월=100점)
+        data_score = min(100, (n / 12) * 100)
+        
+        # 추세 안정성 점수
+        recent_slope = (gs_shares[-1] - gs_shares[-3]) / 2 if n >= 3 else share_slope
+        trend_consistency = 1 if (recent_slope * share_slope) > 0 else 0.5
+        trend_score = share_r2 * trend_consistency * 100
+        
+        # 변동성 점수 (변동성이 낮을수록 높은 점수)
+        cv = share_std / share_mean if share_mean > 0 else 1
+        volatility_score = max(0, (1 - cv * 5)) * 100
+        
+        # 종합 신뢰도 (가중 평균)
+        confidence_score = (
+            data_score * 0.25 +
+            trend_score * 0.35 +
+            volatility_score * 0.40
+        )
         confidence_score = max(0, min(100, confidence_score))
         
         # 미래 예측 (선형 회귀 기반)
@@ -168,11 +184,18 @@ class BacktestSimulator:
             'statistics': {
                 'share_mean': share_mean,
                 'share_std': share_std,
-                'n_samples': n
+                'n_samples': n,
+                'cv': cv  # 변동계수
             },
             'confidence': {
                 'score': round(confidence_score, 2),
-                'level': 'HIGH' if confidence_score >= 70 else 'MEDIUM' if confidence_score >= 50 else 'LOW'
+                # 백테스트 기반 조정된 경계: HIGH >= 80, MEDIUM >= 60, LOW < 60
+                'level': 'HIGH' if confidence_score >= 80 else 'MEDIUM' if confidence_score >= 60 else 'LOW',
+                'factors': {
+                    'data_score': round(data_score, 1),
+                    'trend_score': round(trend_score, 1),
+                    'volatility_score': round(volatility_score, 1)
+                }
             },
             'predictions': predictions
         }
