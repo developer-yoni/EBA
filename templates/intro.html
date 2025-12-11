@@ -21,9 +21,9 @@
         #main-hero canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         .hero-typography { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; display: flex; align-items: center; white-space: nowrap; font-size: clamp(28px, 7vw, 100px); font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
         .char-g, .char-s1 { display: inline-block; color: #fff; }
-        .hidden-text { display: inline-block; opacity: 0; max-width: 0; overflow: hidden; color: #fff; white-space: nowrap; }
-        .char-s2, .text-tudio { display: inline-block; opacity: 0; max-width: 0; overflow: hidden; color: #fff; }
-        .studio-group { display: inline-flex; white-space: nowrap; }
+        .hidden-text { display: inline-block; opacity: 0; width: 0; overflow: hidden; color: #fff; white-space: nowrap; }
+        .text-tudio { display: inline-block; opacity: 0; width: 0; overflow: hidden; color: #fff; }
+        .studio-group { display: inline-flex; white-space: nowrap; opacity: 0; }
         .hero-enter-btn { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 100; padding: 18px 50px; font-size: 18px; font-weight: 700; color: #000; background: linear-gradient(135deg, #FFD700, #FFA500); border: none; border-radius: 50px; cursor: pointer; opacity: 0; text-decoration: none; text-transform: uppercase; letter-spacing: 2px; box-shadow: 0 4px 30px rgba(255, 215, 0, 0.4); transition: all 0.3s ease; }
         .hero-enter-btn.visible { opacity: 1; }
         .hero-enter-btn:hover { transform: translateX(-50%) translateY(-3px); box-shadow: 0 8px 40px rgba(255, 215, 0, 0.6); }
@@ -184,7 +184,7 @@
     <section id="main-hero">
         <canvas id="hero-canvas"></canvas>
         <div class="hero-typography">
-            <span class="char-g">G</span><span class="char-s1">S</span><span class="hidden-text"> INSIGHT </span><span class="studio-group"><span class="char-s2">S</span><span class="text-tudio">TUDIO</span></span>
+            <span class="char-g">G</span><span class="char-s1">S</span><span class="hidden-text">&nbsp;INSIGHT&nbsp;S</span><span class="studio-group"><span class="text-tudio">TUDIO</span></span>
         </div>
         <a href="#scene-authority" class="hero-enter-btn" id="heroEnterBtn">Explore Data ↓</a>
     </section>
@@ -287,25 +287,27 @@
             }, 60);
         }
 
-        // 타이포그래피 애니메이션: GS → G STUDIO → GS INSIGHT STUDIO
+        // 타이포그래피 애니메이션: GS → GS INSIGHT STUDIO
         function initHeroTypographyAnimation() {
             const tl = gsap.timeline({ delay: 0.5 });
-            // 1단계: S 사라지고 STUDIO 나타남
-            tl.to('.char-s1', { opacity: 0, maxWidth: 0, duration: 0.8 }, 0);
-            tl.to('.char-s2', { opacity: 1, maxWidth: '1em', duration: 0.8 }, 0.3);
-            tl.to('.text-tudio', { opacity: 1, maxWidth: '5em', duration: 0.8 }, 0.3);
-            // 2단계: STUDIO 오른쪽으로 이동
-            tl.to('.studio-group', { x: 10, duration: 1 }, 1.2);
-            // 3단계: " INSIGHT " 나타남
-            tl.to('.hidden-text', { opacity: 1, maxWidth: '8em', duration: 1.2 }, 1.8);
-            // 4단계: 버튼 표시
-            tl.to('#heroEnterBtn', { opacity: 1, duration: 0.6, onComplete: () => document.getElementById('heroEnterBtn').classList.add('visible') }, 3.2);
+            
+            // 1단계: " INSIGHT " 나타남 (GS 뒤에)
+            tl.to('.hidden-text', { opacity: 1, width: 'auto', duration: 1.0, ease: 'power2.out' }, 0);
+            
+            // 2단계: STUDIO 그룹 나타남 (TUDIO만, S는 이미 GS에 있음)
+            tl.to('.studio-group', { opacity: 1, duration: 0.3 }, 0.8);
+            tl.to('.text-tudio', { opacity: 1, width: 'auto', duration: 0.8, ease: 'power2.out' }, 0.9);
+            // char-s2는 숨김 유지 (GS의 S가 이미 있으므로 STUDIO의 S는 불필요)
+            
+            // 3단계: 버튼 표시
+            tl.to('#heroEnterBtn', { opacity: 1, duration: 0.6, onComplete: () => document.getElementById('heroEnterBtn').classList.add('visible') }, 2.0);
+            
             // 번개 스케일
             if (heroLightningMesh) {
                 tl.to(heroLightningMesh.scale, { x: 0.7, y: 0.7, z: 0.7, duration: 2 }, 1);
                 tl.to(heroLightningMesh.position, { y: -1.5, duration: 2 }, 1);
             }
-            tl.call(() => { initScrollAnimations(); loadDashboardData(); }, null, 4);
+            tl.call(() => { initScrollAnimations(); loadDashboardData(); }, null, 3.5);
         }
 
         // Three.js 캔버스들
