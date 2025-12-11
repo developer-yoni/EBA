@@ -4881,6 +4881,7 @@
             const confidence = data.confidence || {};
             const baselinePred = data.baseline_prediction || {};
             const scenarioPred = data.scenario_prediction || {};
+            const targetAnalysis = data.target_analysis || {};
             
             // 모드별 요소 선택
             const insightsSection = document.getElementById(mode === 1 ? 'aiInsightsSection1' : 'aiInsightsSection2');
@@ -4888,10 +4889,26 @@
             
             // 현재 시장점유율과 예측값
             const currentShare = analysis.current_market_share || 0;
-            const baselineShare = baselinePred.final_market_share || currentShare;
-            const scenarioShare = scenarioPred.final_market_share || currentShare;
             const simPeriodMonths = meta.sim_period_months || 6;
             const extraChargers = meta.extra_chargers || 0;
+            
+            // 모드별 baselineShare, scenarioShare 계산
+            let baselineShare, scenarioShare;
+            if (mode === 2) {
+                // 모드 2: 목표 점유율 역계산 - target_analysis에서 가져옴
+                baselineShare = targetAnalysis.baseline_share || currentShare;
+                // scenario_predictions의 마지막 값이 목표 달성 시 예상 점유율
+                const scenarioPreds = targetAnalysis.scenario_predictions || [];
+                if (scenarioPreds.length > 0) {
+                    scenarioShare = scenarioPreds[scenarioPreds.length - 1].market_share || meta.target_share || currentShare;
+                } else {
+                    scenarioShare = meta.target_share || currentShare;
+                }
+            } else {
+                // 모드 1: 충전기 추가 시뮬레이션
+                baselineShare = baselinePred.final_market_share || currentShare;
+                scenarioShare = scenarioPred.final_market_share || currentShare;
+            }
             
             // 인사이트 HTML 생성
             insightsContent.innerHTML = `
