@@ -1639,39 +1639,6 @@
                     <br><span style="font-size: 12px; color: #a0aec0;">Bedrock은 예측 결과에 대한 인사이트 생성에만 활용됩니다. 백테스트 검증 완료 (MAPE 1.14%)</span>
                 </p>
                 
-                <!-- 신뢰도 기반 예측 범위 안내 -->
-                <div id="reliabilityInfo" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); padding: 16px 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid rgba(59, 130, 246, 0.2);">
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                        <span style="font-size: 20px;">🔬</span>
-                        <div>
-                            <div style="font-weight: var(--fw-semibold); color: var(--text-primary);">신뢰도 기반 예측 범위</div>
-                            <div style="font-size: 12px; color: var(--text-muted);">백테스트 결과 기반, MAPE 2% 이하 & MAE 0.3%p 이하 기준</div>
-                        </div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
-                        <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">기준 시점</div>
-                            <div style="font-size: 16px; font-weight: var(--fw-bold); color: var(--brand-primary);" id="reliabilityBaseMonth">-</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">RAG 최신 데이터</div>
-                        </div>
-                        <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">최대 예측 기간</div>
-                            <div style="font-size: 16px; font-weight: var(--fw-bold); color: var(--success);" id="reliabilityMaxPeriod">-</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">신뢰도 검증 완료</div>
-                        </div>
-                        <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">예측 종료 시점</div>
-                            <div style="font-size: 16px; font-weight: var(--fw-bold); color: var(--warning);" id="reliabilityEndMonth">-</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">최대 예측 가능</div>
-                        </div>
-                        <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">현재 GS차지비 점유율</div>
-                            <div style="font-size: 16px; font-weight: var(--fw-bold); color: var(--brand-secondary);" id="reliabilityCurrentShare">-</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">기준 시점 기준</div>
-                        </div>
-                    </div>
-                </div>
-                
                 <!-- 시뮬레이션 모드 선택 (탭 형태) -->
                 <div style="margin-bottom: 20px;">
                     <div style="display: flex; border-bottom: 2px solid var(--border-primary);">
@@ -4156,12 +4123,6 @@
                 if (data.success) {
                     reliabilityConfig = data;
                     console.log('✅ 신뢰도 설정 로드:', reliabilityConfig);
-                    
-                    // UI 업데이트
-                    document.getElementById('reliabilityBaseMonth').textContent = data.rag_latest_month || '-';
-                    document.getElementById('reliabilityMaxPeriod').textContent = `${data.max_reliable_period}개월`;
-                    document.getElementById('reliabilityEndMonth').textContent = data.prediction_end_month || '-';
-                    document.getElementById('reliabilityCurrentShare').textContent = data.current_gs_share ? `${data.current_gs_share.toFixed(2)}%` : '-';
                     
                     // 기준월 고정 (RAG 최신 데이터)
                     const baseMonthInput = document.getElementById('simBaseMonth');
