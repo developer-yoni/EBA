@@ -14,7 +14,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from typing import List, Dict, Tuple, Optional
 from scipy import stats
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.preprocessing import PolynomialFeatures
 
 
@@ -114,21 +114,22 @@ class BacktestSimulator:
         gs_chargers = np.array([h['total_chargers'] for h in gs_history])
         market_chargers = np.array([m['total_chargers'] for m in market_history])
         
-        # 선형 회귀 - 시장점유율
-        lr_share = LinearRegression()
+        # 백테스트 최적화 결과 (2025-12-11): Ridge(alpha=10.0) 사용
+        # Ridge 회귀 - 시장점유율 (참고용)
+        lr_share = Ridge(alpha=10.0)
         lr_share.fit(months_idx, gs_shares)
         share_slope = lr_share.coef_[0]
         share_intercept = lr_share.intercept_
         share_r2 = lr_share.score(months_idx, gs_shares)
         
-        # 선형 회귀 - 충전기
-        lr_chargers = LinearRegression()
+        # Ridge 회귀 - GS 충전기
+        lr_chargers = Ridge(alpha=10.0)
         lr_chargers.fit(months_idx, gs_chargers)
         charger_slope = lr_chargers.coef_[0]
         charger_r2 = lr_chargers.score(months_idx, gs_chargers)
         
-        # 시장 전체
-        lr_market = LinearRegression()
+        # Ridge 회귀 - 시장 전체
+        lr_market = Ridge(alpha=10.0)
         lr_market.fit(months_idx, market_chargers)
         market_slope = lr_market.coef_[0]
         
@@ -157,17 +158,26 @@ class BacktestSimulator:
         )
         confidence_score = max(0, min(100, confidence_score))
         
-        # 미래 예측 (선형 회귀 기반)
+        # 미래 예측 (개선된 ratio 방식)
+        # 핵심: GS충전기/시장전체 각각 예측 후 점유율 계산
         predictions = []
         for i in range(1, 13):
             future_idx = n + i - 1
-            pred_share = share_intercept + share_slope * future_idx
             pred_chargers = lr_chargers.intercept_ + charger_slope * future_idx
             pred_market = lr_market.intercept_ + market_slope * future_idx
+            
+            # ratio 방식: 점유율 = GS충전기 / 시장전체 * 100
+            pred_share_ratio = (pred_chargers / pred_market) * 100 if pred_market > 0 else 0
+            # direct 방식 (비교용)
+            pred_share_direct = share_intercept + share_slope * future_idx
+            # 백테스트 최적화 결과 (2025-12-11): Ratio 100%가 최적
+            pred_share = pred_share_ratio
             
             predictions.append({
                 'months_ahead': i,
                 'predicted_share': round(pred_share, 4),
+                'predicted_share_ratio': round(pred_share_ratio, 4),
+                'predicted_share_direct': round(pred_share_direct, 4),
                 'predicted_chargers': int(pred_chargers),
                 'predicted_market': int(pred_market)
             })
