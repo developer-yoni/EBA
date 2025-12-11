@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GS Insight STUDIO</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; font-family: 'Pretendard Variable', sans-serif; background: #050508; color: #fff; overflow-x: hidden; }
+
+        #intro-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #050508; z-index: 9999; display: flex; justify-content: center; align-items: center; transition: opacity 1.2s ease; }
+        #intro-overlay.exit { opacity: 0; pointer-events: none; }
+        #intro-text { font-size: clamp(100px, 25vw, 280px); font-weight: 900; color: #fff; }
+
+        #main-hero { position: relative; width: 100%; height: 100vh; background: #050508; overflow: hidden; }
+        #main-hero canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        .hero-typography { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; display: flex; align-items: center; white-space: nowrap; font-size: clamp(28px, 7vw, 100px); font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
+        .char-g, .char-s1 { display: inline-block; color: #fff; }
+        .hidden-text { display: inline-block; opacity: 0; max-width: 0; overflow: hidden; color: #fff; white-space: nowrap; }
+        .char-s2, .text-tudio { display: inline-block; opacity: 0; max-width: 0; overflow: hidden; color: #fff; }
+        .studio-group { display: inline-flex; white-space: nowrap; }
+        .hero-enter-btn { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 100; padding: 18px 50px; font-size: 18px; font-weight: 700; color: #000; background: linear-gradient(135deg, #FFD700, #FFA500); border: none; border-radius: 50px; cursor: pointer; opacity: 0; text-decoration: none; text-transform: uppercase; letter-spacing: 2px; box-shadow: 0 4px 30px rgba(255, 215, 0, 0.4); transition: all 0.3s ease; }
+        .hero-enter-btn.visible { opacity: 1; }
+        .hero-enter-btn:hover { transform: translateX(-50%) translateY(-3px); box-shadow: 0 8px 40px rgba(255, 215, 0, 0.6); }
+
+        .scroll-section { position: relative; width: 100%; height: 100vh; display: flex; justify-content: center; align-items: center; background: #050508; }
+        .scroll-section canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        .section-content { position: relative; z-index: 10; text-align: center; padding: 40px; }
+        .section-subtitle { font-size: clamp(16px, 2vw, 24px); font-weight: 600; color: rgba(255, 255, 255, 0.7); margin-bottom: 20px; letter-spacing: 2px; text-transform: uppercase; }
+        
+        .section-title { font-size: clamp(80px, 16vw, 200px); font-weight: 900; letter-spacing: -0.03em; line-height: 1; }
+        .section-title .number-3d {
+            display: inline-block;
+            text-shadow: 0 1px 0 #ccc, 0 2px 0 #c9c9c9, 0 3px 0 #bbb, 0 4px 0 #b9b9b9,
+                0 5px 0 #aaa, 0 6px 1px rgba(0,0,0,.1), 0 0 5px rgba(0,0,0,.1),
+                0 1px 3px rgba(0,0,0,.3), 0 3px 5px rgba(0,0,0,.2),
+                0 5px 10px rgba(0,0,0,.25), 0 10px 10px rgba(0,0,0,.2),
+                0 20px 20px rgba(0,0,0,.15), 0 0 80px currentColor;
+            transform: perspective(500px) rotateX(10deg);
+            transition: transform 0.3s ease;
+        }
+        .section-title .number-3d:hover { transform: perspective(500px) rotateX(0deg) scale(1.05); }
+        .section-title small { font-size: 0.3em; font-weight: 600; opacity: 0.8; vertical-align: middle; }
+        .section-desc { font-size: clamp(14px, 1.5vw, 20px); color: rgba(255, 255, 255, 0.6); margin-top: 15px; }
+
+        #scene-authority .section-title { color: #2E86DE; }
+        #scene-scale .section-title { color: #FFD700; }
+        #scene-insight .section-title { color: #48bb78; }
+
+        #horizontal-section { position: relative; width: 100%; overflow: hidden; background: #050508; }
+        .horizontal-wrapper { display: flex; width: fit-content; padding: 0 10vw; }
+        .dashboard-panel { width: 85vw; min-height: 100vh; flex-shrink: 0; display: flex; justify-content: center; align-items: center; padding: 60px 40px; background: transparent; margin-right: 5vw; }
+        .dashboard-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 24px; padding: 40px; box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5); max-width: 1100px; width: 100%; }
+        .dashboard-header { margin-bottom: 30px; }
+        .dashboard-header h2 { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+        .dashboard-header p { font-size: 14px; color: rgba(255, 255, 255, 0.6); }
+
+        .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+        .kpi-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 24px; color: white; }
+        .kpi-card.gold { background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: #1a1a2e; }
+        .kpi-card.green { background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); }
+        .kpi-card.blue { background: linear-gradient(135deg, #2E86DE 0%, #1a73e8 100%); }
+        .kpi-label { font-size: 13px; font-weight: 600; opacity: 0.9; margin-bottom: 8px; text-transform: uppercase; }
+        .kpi-value { font-size: 36px; font-weight: 900; }
+
+        .chart-container { background: rgba(255, 255, 255, 0.02); border-radius: 16px; padding: 30px; margin-top: 20px; border: 1px solid rgba(255, 255, 255, 0.05); }
+        .chart-wrapper { position: relative; height: 350px; }
+
+        .data-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .data-table th, .data-table td { padding: 14px 16px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.1); font-size: 14px; color: rgba(255, 255, 255, 0.9); }
+        .data-table th { background: rgba(255, 255, 255, 0.05); font-weight: 600; color: rgba(255, 255, 255, 0.7); text-transform: uppercase; font-size: 12px; }
+        .data-table .highlight { background: rgba(255, 215, 0, 0.15) !important; font-weight: 600; color: #FFD700; }
+
+        .enter-btn { position: fixed; bottom: 40px; right: 40px; z-index: 100; padding: 16px 40px; font-size: 16px; font-weight: 700; color: #000; background: linear-gradient(135deg, #FFD700, #FFA500); border: none; border-radius: 50px; cursor: pointer; opacity: 0; text-decoration: none; text-transform: uppercase; box-shadow: 0 4px 30px rgba(255, 215, 0, 0.4); transition: all 0.3s ease; }
+        .enter-btn.visible { opacity: 1; }
+        .enter-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 40px rgba(255, 215, 0, 0.6); }
+
+        .loading { display: flex; justify-content: center; align-items: center; height: 200px; color: rgba(255, 255, 255, 0.6); }
+        .loading-spinner { width: 40px; height: 40px; border: 3px solid rgba(255, 255, 255, 0.1); border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 15px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .progress-bar { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, #667eea, #764ba2, #FFD700); z-index: 1000; width: 0%; }
+    </style>
+</head>
+<body>
+    <div class="progress-bar" id="progressBar"></div>
+    <div id="intro-overlay"><h1 id="intro-text">AA</h1></div>
+
+    <section id="main-hero">
+        <canvas id="hero-canvas"></canvas>
+        <div class="hero-typography">
+            <span class="char-g">G</span><span class="char-s1">S</span><span class="hidden-text">S Insight </span><span class="studio-group"><span class="char-s2">S</span><span class="text-tudio">TUDIO</span></span>
+        </div>
+        <a href="#scene-authority" class="hero-enter-btn" id="heroEnterBtn">Explore Data ↓</a>
+    </section>
+
+    <section class="scroll-section" id="scene-authority">
+        <canvas id="authority-canvas"></canvas>
+        <div class="section-content">
+            <h3 class="section-subtitle">🏆 Korea's No.1 CPO</h3>
+            <h1 class="section-title"><span class="number-3d" id="marketShareValue">0</span><small>%</small></h1>
+            <p class="section-desc">Market Share Leadership</p>
+        </div>
+    </section>
+
+    <section class="scroll-section" id="scene-scale">
+        <canvas id="scale-canvas"></canvas>
+        <div class="section-content">
+            <h3 class="section-subtitle">⚡ Mega Infrastructure</h3>
+            <h1 class="section-title"><span class="number-3d" id="chargerCount">0</span><small> Chargers</small></h1>
+            <p class="section-desc">Operating <span id="stationCount">0</span> Stations Nationwide</p>
+        </div>
+    </section>
+
+    <section class="scroll-section" id="scene-insight">
+        <canvas id="insight-canvas"></canvas>
+        <div class="section-content">
+            <h3 class="section-subtitle">📊 Analyzing Total Market</h3>
+            <h1 class="section-title"><span class="number-3d" id="dataPoints">0</span><small> Data Points</small></h1>
+            <p class="section-desc">Comprehensive EV Charging Infrastructure Analytics</p>
+        </div>
+    </section>
+
+    <section id="horizontal-section">
+        <div class="horizontal-wrapper" id="horizontalWrapper">
+            <div class="dashboard-panel">
+                <div class="dashboard-card">
+                    <div class="dashboard-header"><h2>📊 GS차지비 KPI Overview</h2><p id="kpiPeriod">Loading...</p></div>
+                    <div class="kpi-grid" id="kpiGrid"><div class="loading"><div class="loading-spinner"></div><span>데이터 로딩 중...</span></div></div>
+                </div>
+            </div>
+            <div class="dashboard-panel">
+                <div class="dashboard-card">
+                    <div class="dashboard-header"><h2>⚡ 전체 시장 충전기 증감 추이</h2><p>완속/급속 충전기 월별 증감량</p></div>
+                    <div class="chart-container"><div class="chart-wrapper"><canvas id="chargerTrendChart"></canvas></div></div>
+                </div>
+            </div>
+            <div class="dashboard-panel">
+                <div class="dashboard-card">
+                    <div class="dashboard-header"><h2>🔋 충전기 운영 현황</h2><p>완속/급속 충전기 누적 운영 대수</p></div>
+                    <div class="chart-container"><div class="chart-wrapper"><canvas id="cumulativeChart"></canvas></div></div>
+                </div>
+            </div>
+            <div class="dashboard-panel">
+                <div class="dashboard-card">
+                    <div class="dashboard-header"><h2>🏆 CPO 순위 현황</h2><p id="cpoRankingPeriod">충전기 보유 기준 상위 10개사</p></div>
+                    <div id="cpoTableContainer"><div class="loading"><div class="loading-spinner"></div><span>데이터 로딩 중...</span></div></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <a href="/dashboard" class="enter-btn" id="enterBtn">Enter Studio →</a>
+
+    <script>
+        gsap.registerPlugin(ScrollTrigger);
+        const API_BASE = '/api';
+        let dashboardData = null;
+        let chartInstances = {};
+        let heroLightningMesh = null;
+        let dataLoaded = false;
+
+        // 인트로 애니메이션
+        function runIntroAnimation() {
+            const introText = document.getElementById('intro-text');
+            const introOverlay = document.getElementById('intro-overlay');
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            let elapsed = 0;
+            const scrambleInterval = setInterval(() => {
+                elapsed += 60;
+                introText.textContent = chars[Math.floor(Math.random() * 26)] + chars[Math.floor(Math.random() * 26)];
+                if (elapsed >= 2500) {
+                    clearInterval(scrambleInterval);
+                    introText.textContent = 'GS';
+                    setTimeout(() => {
+                        introOverlay.classList.add('exit');
+                        setTimeout(initHeroTypographyAnimation, 1200);
+                    }, 1000);
+                }
+            }, 60);
+        }
+
+        // 타이포그래피 애니메이션: GS → G STUDIO → GS Insight STUDIO
+        function initHeroTypographyAnimation() {
+            const tl = gsap.timeline({ delay: 0.5 });
+            // 1단계: S 사라지고 STUDIO 나타남
+            tl.to('.char-s1', { opacity: 0, maxWidth: 0, duration: 0.8 }, 0);
+            tl.to('.char-s2', { opacity: 1, maxWidth: '1em', duration: 0.8 }, 0.3);
+            tl.to('.text-tudio', { opacity: 1, maxWidth: '5em', duration: 0.8 }, 0.3);
+            // 2단계: STUDIO 오른쪽으로 이동
+            tl.to('.studio-group', { x: 10, duration: 1 }, 1.2);
+            // 3단계: "S Insight " 나타남
+            tl.to('.hidden-text', { opacity: 1, maxWidth: '8em', duration: 1.2 }, 1.8);
+            // 4단계: 버튼 표시
+            tl.to('#heroEnterBtn', { opacity: 1, duration: 0.6, onComplete: () => document.getElementById('heroEnterBtn').classList.add('visible') }, 3.2);
+            // 번개 스케일
+            if (heroLightningMesh) {
+                tl.to(heroLightningMesh.scale, { x: 0.7, y: 0.7, z: 0.7, duration: 2 }, 1);
+                tl.to(heroLightningMesh.position, { y: -1.5, duration: 2 }, 1);
+            }
+            tl.call(() => { initScrollAnimations(); loadDashboardData(); }, null, 4);
+        }
+
+        // Three.js 캔버스들
+        function initHeroCanvas() {
+            const canvas = document.getElementById('hero-canvas');
+            if (!canvas) return;
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050508);
+            const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 10;
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            const shape = new THREE.Shape();
+            shape.moveTo(0.1, 3); shape.lineTo(1.0, 3); shape.lineTo(0.3, 1.0);
+            shape.lineTo(1.0, 1.0); shape.lineTo(-0.2, -3); shape.lineTo(0.3, -0.5);
+            shape.lineTo(-0.5, -0.5); shape.lineTo(0.1, 3);
+            const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.5, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.1, bevelSegments: 12 });
+            geometry.center();
+            const material = new THREE.MeshPhysicalMaterial({ color: 0xFFD700, metalness: 1.0, roughness: 0.12 });
+            heroLightningMesh = new THREE.Mesh(geometry, material);
+            scene.add(heroLightningMesh);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+            const mainLight = new THREE.PointLight(0xFFD700, 3, 25);
+            mainLight.position.set(5, 5, 8);
+            scene.add(mainLight);
+
+            function animate() {
+                requestAnimationFrame(animate);
+                if (heroLightningMesh) { heroLightningMesh.rotation.y += 0.006; heroLightningMesh.rotation.x = Math.sin(Date.now() * 0.0008) * 0.08; }
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        function initAuthorityCanvas() {
+            const canvas = document.getElementById('authority-canvas');
+            if (!canvas) return;
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            const lines = [];
+            const lineData = [[0, 0.2, 0.5, 0.8, 1.2, 1.5, 1.8, 2.2, 2.5, 2.8], [0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0, 1.1, 1.2, 1.3], [0, 0.05, 0.15, 0.25, 0.35, 0.45, 0.5, 0.55, 0.6, 0.65]];
+            const colors = [0x2E86DE, 0x444444, 0x333333];
+            lineData.forEach((data, idx) => {
+                const points = data.map((y, x) => new THREE.Vector3(x * 0.8 - 3.5, y * 2 - 1.5, 0));
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const material = new THREE.LineBasicMaterial({ color: colors[idx], transparent: true, opacity: idx === 0 ? 1 : 0.3 });
+                const line = new THREE.Line(geometry, material);
+                line.position.z = -5;
+                scene.add(line);
+                lines.push(line);
+            });
+            camera.position.z = 5;
+            function animate() { requestAnimationFrame(animate); lines.forEach(l => l.rotation.y = Math.sin(Date.now() * 0.0005) * 0.1); renderer.render(scene, camera); }
+            animate();
+        }
+
+        function initScaleCanvas() {
+            const canvas = document.getElementById('scale-canvas');
+            if (!canvas) return;
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            const cubeSize = 2.8;
+            const particlesPerEdge = 18;
+            const particleCount = Math.pow(particlesPerEdge, 3);
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            const spacing = cubeSize / (particlesPerEdge - 1);
+            let idx = 0;
+            for (let x = 0; x < particlesPerEdge; x++) {
+                for (let y = 0; y < particlesPerEdge; y++) {
+                    for (let z = 0; z < particlesPerEdge; z++) {
+                        const px = x * spacing - cubeSize / 2;
+                        const py = y * spacing - cubeSize / 2;
+                        const pz = z * spacing - cubeSize / 2;
+                        positions[idx * 3] = px;
+                        positions[idx * 3 + 1] = py;
+                        positions[idx * 3 + 2] = pz;
+                        const dist = Math.sqrt(px*px + py*py + pz*pz) / (cubeSize * 0.866);
+                        const brightness = 0.6 + dist * 0.4;
+                        colors[idx * 3] = brightness;
+                        colors[idx * 3 + 1] = brightness * 0.78;
+                        colors[idx * 3 + 2] = 0;
+                        idx++;
+                    }
+                }
+            }
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            const material = new THREE.PointsMaterial({ size: 0.025, vertexColors: true, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+            const cube = new THREE.Points(geometry, material);
+            scene.add(cube);
+            camera.position.z = 6;
+            function animate() { requestAnimationFrame(animate); cube.rotation.y += 0.003; cube.rotation.x += 0.001; renderer.render(scene, camera); }
+            animate();
+        }
+
+        function initInsightCanvas() {
+            const canvas = document.getElementById('insight-canvas');
+            if (!canvas) return;
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            const particleCount = 3000;
+            const positions = new Float32Array(particleCount * 3);
+            for (let i = 0; i < particleCount; i++) {
+                const phi = Math.acos(-1 + (2 * i) / particleCount);
+                const theta = Math.sqrt(particleCount * Math.PI) * phi;
+                const radius = 2.5;
+                positions[i * 3] = radius * Math.cos(theta) * Math.sin(phi);
+                positions[i * 3 + 1] = radius * Math.sin(theta) * Math.sin(phi);
+                positions[i * 3 + 2] = radius * Math.cos(phi);
+            }
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const material = new THREE.PointsMaterial({ size: 0.03, color: 0x48bb78, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+            const sphere = new THREE.Points(geometry, material);
+            scene.add(sphere);
+            camera.position.z = 6;
+            function animate() { requestAnimationFrame(animate); sphere.rotation.y += 0.003; sphere.rotation.x += 0.001; renderer.render(scene, camera); }
+            animate();
+        }
+
+        // 스크롤 애니메이션
+        function initScrollAnimations() {
+            gsap.to('#progressBar', { width: '100%', ease: 'none', scrollTrigger: { trigger: 'body', start: 'top top', end: 'bottom bottom', scrub: 0.3 } });
+
+            ScrollTrigger.create({
+                trigger: '#scene-authority', start: 'top center',
+                onEnter: () => {
+                    const marketShare = dashboardData?.gsKpi?.marketShare || dashboardData?.gsKpi?.market_share || 16.1;
+                    animateCounter('marketShareValue', marketShare, 1.5, 1);
+                }
+            });
+            ScrollTrigger.create({
+                trigger: '#scene-scale', start: 'top center',
+                onEnter: () => {
+                    const totalChargers = dashboardData?.gsKpi?.totalChargers || dashboardData?.gsKpi?.total_chargers || 73912;
+                    const stations = dashboardData?.gsKpi?.stations || 13228;
+                    animateCounter('chargerCount', totalChargers, 2, 0);
+                    animateCounter('stationCount', stations, 2, 0);
+                }
+            });
+            ScrollTrigger.create({
+                trigger: '#scene-insight', start: 'top center',
+                onEnter: () => {
+                    const dataPoints = dashboardData?.totalDataPoints || dashboardData?.totalMarketChargers || 459523;
+                    animateCounter('dataPoints', dataPoints, 2, 0);
+                }
+            });
+
+            const horizontalWrapper = document.getElementById('horizontalWrapper');
+            const panels = gsap.utils.toArray('.dashboard-panel');
+            gsap.to(horizontalWrapper, {
+                x: () => -(horizontalWrapper.scrollWidth - window.innerWidth),
+                ease: 'none',
+                scrollTrigger: {
+                    trigger: '#horizontal-section', start: 'top top',
+                    end: () => `+=${horizontalWrapper.scrollWidth - window.innerWidth}`,
+                    scrub: 1, pin: true, anticipatePin: 1,
+                    onUpdate: (self) => {
+                        panels.forEach((panel, i) => {
+                            const card = panel.querySelector('.dashboard-card');
+                            const panelProgress = (self.progress * panels.length) - i;
+                            let scale = 1 - Math.abs(panelProgress) * 0.05;
+                            scale = Math.max(0.9, Math.min(1, scale));
+                            if (card) card.style.transform = `scale(${scale})`;
+                        });
+                    }
+                }
+            });
+            ScrollTrigger.create({ trigger: '#horizontal-section', start: 'top top', onEnter: () => document.getElementById('enterBtn').classList.add('visible'), onLeaveBack: () => document.getElementById('enterBtn').classList.remove('visible') });
+        }
+
+        function animateCounter(elementId, targetValue, duration, decimals) {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            const obj = { value: 0 };
+            gsap.to(obj, { value: targetValue, duration: duration, ease: 'power2.out', onUpdate: () => { element.textContent = decimals > 0 ? obj.value.toFixed(decimals) : Math.floor(obj.value).toLocaleString(); } });
+        }
+
+        // API에서 대시보드 데이터 로딩
+        async function loadDashboardData() {
+            try {
+                // 먼저 데이터 로드
+                const loadResponse = await fetch(`${API_BASE}/load`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                const loadResult = await loadResponse.json();
+                
+                if (!loadResult.success) {
+                    console.error('데이터 로드 실패:', loadResult.error);
+                    dashboardData = getSampleData();
+                    renderDashboard(dashboardData);
+                    return;
+                }
+
+                // 최신 월 가져오기
+                const latestMonth = loadResult.latest_month || loadResult.unique_months?.[0];
+                
+                // 대시보드 데이터 요청
+                const dashboardResponse = await fetch(`${API_BASE}/dashboard`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ months: [latestMonth], startMonth: latestMonth, endMonth: latestMonth })
+                });
+                const dashboardResult = await dashboardResponse.json();
+                
+                if (dashboardResult.success && dashboardResult.dashboard) {
+                    dashboardData = transformApiData(dashboardResult.dashboard, latestMonth);
+                    dataLoaded = true;
+                } else {
+                    dashboardData = getSampleData();
+                }
+                
+                renderDashboard(dashboardData);
+            } catch (error) {
+                console.error('API 호출 오류:', error);
+                dashboardData = getSampleData();
+                renderDashboard(dashboardData);
+            }
+        }
+
+        function transformApiData(apiData, latestMonth) {
+            const gsKpi = apiData.gs_kpi?.current || {};
+            const topPerformers = apiData.top_performers?.ranking || [];
+            const summaryTable = apiData.summary_table || {};
+            
+            const totalMarketChargers = summaryTable.total?.total_chargers || 459523;
+            
+            return {
+                gsKpi: {
+                    marketShare: gsKpi.market_share || 16.1,
+                    totalChargers: gsKpi.total_chargers || 73912,
+                    stations: gsKpi.stations || 13228,
+                    slowChargers: gsKpi.slow_chargers || 72354,
+                    fastChargers: gsKpi.fast_chargers || 1558
+                },
+                chargerTrend: apiData.charts?.total_trend || null,
+                cumulativeChargers: apiData.charts?.cumulative_chargers || null,
+                topCpos: topPerformers.map((cpo, idx) => ({
+                    rank: idx + 1,
+                    name: cpo.cpo,
+                    chargers: cpo.chargers,
+                    share: totalMarketChargers > 0 ? ((cpo.chargers / totalMarketChargers) * 100).toFixed(1) + '%' : '-'
+                })),
+                totalDataPoints: totalMarketChargers,
+                totalMarketChargers: totalMarketChargers,
+                latestMonth: latestMonth
+            };
+        }
+        
+        function getSampleData() {
+            return {
+                gsKpi: { marketShare: 16.1, totalChargers: 73912, stations: 13228, slowChargers: 72354, fastChargers: 1558 },
+                chargerTrend: {
+                    months: ['2024-12', '2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10', '2025-11'],
+                    slow_charger_change: [11000, 9000, 4000, 8500, 4000, 4500, 5000, 6000, 7000, 3000, -1800, 5500],
+                    fast_charger_change: [800, 700, 600, 700, 1900, 500, 400, 600, 500, 100, -100, 400]
+                },
+                cumulativeChargers: {
+                    months: ['2024-12', '2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10', '2025-11'],
+                    slow_chargers: [350000, 359000, 363000, 371500, 375500, 380000, 385000, 391000, 398000, 401000, 399200, 410205],
+                    fast_chargers: [40000, 40700, 41300, 42000, 43900, 44400, 44800, 45400, 45900, 46000, 45900, 49318]
+                },
+                topCpos: [
+                    { rank: 1, name: 'GS차지비', chargers: 73912, share: '16.1%' },
+                    { rank: 2, name: '파워큐브', chargers: 66337, share: '14.4%' },
+                    { rank: 3, name: '에버온', chargers: 46956, share: '10.2%' },
+                    { rank: 4, name: 'LG유플러스 볼트업', chargers: 33648, share: '7.3%' },
+                    { rank: 5, name: '플러그링크', chargers: 30733, share: '6.7%' },
+                    { rank: 6, name: '스타코프', chargers: 19035, share: '4.1%' },
+                    { rank: 7, name: '휴맥스이브이', chargers: 18037, share: '3.9%' },
+                    { rank: 8, name: 'NICE인프라', chargers: 16631, share: '3.6%' },
+                    { rank: 9, name: '채비', chargers: 13922, share: '3.0%' },
+                    { rank: 10, name: '이지차저', chargers: 13738, share: '3.0%' }
+                ],
+                totalDataPoints: 459523,
+                totalMarketChargers: 459523,
+                latestMonth: '2025-11'
+            };
+        }
+
+        function renderDashboard(data) {
+            document.getElementById('kpiPeriod').textContent = data.latestMonth || '2025-11';
+            document.getElementById('cpoRankingPeriod').textContent = `${data.latestMonth || '최신'} 기준 상위 10개사`;
+            renderKpiCards(data);
+            if (data.chargerTrend) renderChargerTrendChart(data.chargerTrend);
+            if (data.cumulativeChargers) renderCumulativeChart(data.cumulativeChargers);
+            renderCpoTable(data.topCpos);
+        }
+
+        function renderKpiCards(data) {
+            const kpi = data.gsKpi;
+            document.getElementById('kpiGrid').innerHTML = `
+                <div class="kpi-card gold"><div class="kpi-label">시장점유율</div><div class="kpi-value">${typeof kpi.marketShare === 'number' ? kpi.marketShare.toFixed(1) : kpi.marketShare}%</div></div>
+                <div class="kpi-card blue"><div class="kpi-label">충전소</div><div class="kpi-value">${kpi.stations?.toLocaleString() || '-'}</div></div>
+                <div class="kpi-card green"><div class="kpi-label">완속충전기</div><div class="kpi-value">${kpi.slowChargers?.toLocaleString() || '-'}</div></div>
+                <div class="kpi-card" style="background: linear-gradient(135deg, #f56565 0%, #c53030 100%);"><div class="kpi-label">급속충전기</div><div class="kpi-value">${kpi.fastChargers?.toLocaleString() || '-'}</div></div>
+            `;
+        }
+
+        function renderChargerTrendChart(data) {
+            const ctx = document.getElementById('chargerTrendChart')?.getContext('2d');
+            if (!ctx) return;
+            if (chartInstances.chargerTrend) chartInstances.chargerTrend.destroy();
+            chartInstances.chargerTrend = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.months || [],
+                    datasets: [
+                        { label: '완속충전기 증감', data: data.slow_charger_change || [], backgroundColor: '#667eea', borderRadius: 4 },
+                        { label: '급속충전기 증감', data: data.fast_charger_change || [], backgroundColor: '#48bb78', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.8)', padding: 20 } } },
+                    scales: { 
+                        y: { title: { display: true, text: '증감량 (기)', color: 'rgba(255,255,255,0.7)' }, ticks: { color: 'rgba(255,255,255,0.6)' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                        x: { ticks: { color: 'rgba(255,255,255,0.6)' }, grid: { color: 'rgba(255,255,255,0.1)' } }
+                    }
+                }
+            });
+        }
+
+        function renderCumulativeChart(data) {
+            const ctx = document.getElementById('cumulativeChart')?.getContext('2d');
+            if (!ctx) return;
+            if (chartInstances.cumulative) chartInstances.cumulative.destroy();
+            chartInstances.cumulative = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.months || [],
+                    datasets: [
+                        { label: '완속충전기', data: data.slow_chargers || [], backgroundColor: '#667eea', borderRadius: 4 },
+                        { label: '급속충전기', data: data.fast_chargers || [], backgroundColor: '#48bb78', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.8)', padding: 20 } } },
+                    scales: { 
+                        x: { stacked: true, ticks: { color: 'rgba(255,255,255,0.6)' }, grid: { color: 'rgba(255,255,255,0.1)' } }, 
+                        y: { stacked: true, title: { display: true, text: '충전기 수 (기)', color: 'rgba(255,255,255,0.7)' }, ticks: { color: 'rgba(255,255,255,0.6)' }, grid: { color: 'rgba(255,255,255,0.1)' } }
+                    }
+                }
+            });
+        }
+
+        function renderCpoTable(cpos) {
+            const container = document.getElementById('cpoTableContainer');
+            if (!cpos || cpos.length === 0) {
+                container.innerHTML = '<p style="color: rgba(255,255,255,0.6);">데이터를 불러올 수 없습니다.</p>';
+                return;
+            }
+            let html = `<table class="data-table"><thead><tr><th>순위</th><th>CPO</th><th>충전기 수</th><th>점유율</th></tr></thead><tbody>`;
+            cpos.slice(0, 10).forEach(cpo => {
+                const isGS = cpo.name === 'GS차지비';
+                html += `<tr class="${isGS ? 'highlight' : ''}"><td>${cpo.rank}</td><td>${isGS ? '🏆 ' : ''}${cpo.name}</td><td>${typeof cpo.chargers === 'number' ? cpo.chargers.toLocaleString() : cpo.chargers}</td><td>${cpo.share}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // 초기화
+        window.addEventListener('load', () => {
+            initHeroCanvas();
+            initAuthorityCanvas();
+            initScaleCanvas();
+            initInsightCanvas();
+            runIntroAnimation();
+        });
+        window.addEventListener('resize', () => ScrollTrigger.refresh());
+    </script>
+</body>
+</html>

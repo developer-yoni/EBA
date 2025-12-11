@@ -18,8 +18,13 @@ cache = {
 }
 
 @app.route('/')
-def index():
-    """메인 페이지"""
+def intro():
+    """인트로 페이지"""
+    return render_template('intro.html')
+
+@app.route('/dashboard')
+def dashboard():
+    """대시보드 페이지"""
     return render_template('index.html')
 
 @app.route('/api/months')
@@ -523,11 +528,31 @@ def generate_all_reports():
         
         # 분석 실행
         from data_analyzer import ChargingDataAnalyzer
+        from data_loader import ChargingDataLoader
         target_analyzer = ChargingDataAnalyzer(target_data)
         range_analyzer = ChargingDataAnalyzer(range_data)
         
         target_insights = target_analyzer.generate_insights()
         range_insights = range_analyzer.generate_insights()
+        
+        # 엑셀 요약 데이터로 summary 덮어쓰기 (RAG 데이터 정합성)
+        if 'data_source' in target_data.columns and len(target_data) > 0:
+            data_source = target_data['data_source'].iloc[0]
+            if data_source:
+                loader = ChargingDataLoader()
+                excel_summary = loader.extract_summary_data(data_source)
+                if excel_summary and 'total' in excel_summary:
+                    total = excel_summary['total']
+                    target_insights['summary']['total_cpos'] = total.get('cpos', 0)
+                    target_insights['summary']['total_stations'] = total.get('stations', 0)
+                    target_insights['summary']['total_chargers'] = total.get('total_chargers', 0)
+                    target_insights['summary']['slow_chargers'] = total.get('slow_chargers', 0)
+                    target_insights['summary']['fast_chargers'] = total.get('fast_chargers', 0)
+                    total_chargers = total.get('total_chargers', 0)
+                    if total_chargers > 0:
+                        target_insights['summary']['slow_ratio'] = round(total.get('slow_chargers', 0) / total_chargers * 100, 1)
+                        target_insights['summary']['fast_ratio'] = round(total.get('fast_chargers', 0) / total_chargers * 100, 1)
+                    print(f'✅ AI 리포트용 엑셀 요약 데이터 주입 완료: CPO={total.get("cpos")}, 충전소={total.get("stations")}, 충전기={total.get("total_chargers")}', flush=True)
         
         # 병렬 실행을 위한 함수 정의 (각 스레드에서 별도 generator 인스턴스 생성)
         def generate_kpi():
@@ -685,11 +710,31 @@ def generate_all_reports_stream():
             range_data = cache['full_data'][cache['full_data']['snapshot_month'].isin(available_months)]
             
             from data_analyzer import ChargingDataAnalyzer
+            from data_loader import ChargingDataLoader
             target_analyzer = ChargingDataAnalyzer(target_data)
             range_analyzer = ChargingDataAnalyzer(range_data)
             
             target_insights = target_analyzer.generate_insights()
             range_insights = range_analyzer.generate_insights()
+            
+            # 엑셀 요약 데이터로 summary 덮어쓰기 (RAG 데이터 정합성)
+            if 'data_source' in target_data.columns and len(target_data) > 0:
+                data_source = target_data['data_source'].iloc[0]
+                if data_source:
+                    loader = ChargingDataLoader()
+                    excel_summary = loader.extract_summary_data(data_source)
+                    if excel_summary and 'total' in excel_summary:
+                        total = excel_summary['total']
+                        target_insights['summary']['total_cpos'] = total.get('cpos', 0)
+                        target_insights['summary']['total_stations'] = total.get('stations', 0)
+                        target_insights['summary']['total_chargers'] = total.get('total_chargers', 0)
+                        target_insights['summary']['slow_chargers'] = total.get('slow_chargers', 0)
+                        target_insights['summary']['fast_chargers'] = total.get('fast_chargers', 0)
+                        total_chargers = total.get('total_chargers', 0)
+                        if total_chargers > 0:
+                            target_insights['summary']['slow_ratio'] = round(total.get('slow_chargers', 0) / total_chargers * 100, 1)
+                            target_insights['summary']['fast_ratio'] = round(total.get('fast_chargers', 0) / total_chargers * 100, 1)
+                        print(f'✅ AI 리포트용 엑셀 요약 데이터 주입 완료: CPO={total.get("cpos")}, 충전소={total.get("stations")}, 충전기={total.get("total_chargers")}', flush=True)
             
             # 결과 저장용 큐
             result_queue = queue.Queue()
@@ -857,11 +902,31 @@ def generate_report():
         
         # 분석 실행
         from data_analyzer import ChargingDataAnalyzer
+        from data_loader import ChargingDataLoader
         target_analyzer = ChargingDataAnalyzer(target_data)
         range_analyzer = ChargingDataAnalyzer(range_data)
         
         target_insights = target_analyzer.generate_insights()
         range_insights = range_analyzer.generate_insights()
+        
+        # 엑셀 요약 데이터로 summary 덮어쓰기 (RAG 데이터 정합성)
+        if 'data_source' in target_data.columns and len(target_data) > 0:
+            data_source = target_data['data_source'].iloc[0]
+            if data_source:
+                loader = ChargingDataLoader()
+                excel_summary = loader.extract_summary_data(data_source)
+                if excel_summary and 'total' in excel_summary:
+                    total = excel_summary['total']
+                    target_insights['summary']['total_cpos'] = total.get('cpos', 0)
+                    target_insights['summary']['total_stations'] = total.get('stations', 0)
+                    target_insights['summary']['total_chargers'] = total.get('total_chargers', 0)
+                    target_insights['summary']['slow_chargers'] = total.get('slow_chargers', 0)
+                    target_insights['summary']['fast_chargers'] = total.get('fast_chargers', 0)
+                    total_chargers = total.get('total_chargers', 0)
+                    if total_chargers > 0:
+                        target_insights['summary']['slow_ratio'] = round(total.get('slow_chargers', 0) / total_chargers * 100, 1)
+                        target_insights['summary']['fast_ratio'] = round(total.get('fast_chargers', 0) / total_chargers * 100, 1)
+                    print(f'✅ AI 리포트용 엑셀 요약 데이터 주입 완료: CPO={total.get("cpos")}, 충전소={total.get("stations")}, 충전기={total.get("total_chargers")}', flush=True)
         
         # 리포트 유형별 생성
         generator = AIReportGenerator()

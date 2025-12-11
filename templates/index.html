@@ -1255,7 +1255,7 @@
             border-radius: 8px;
             height: 32px;
             margin: 20px 0;
-            overflow: hidden;
+            overflow: visible;
             position: relative;
             border: 1px solid var(--border-primary);
         }
@@ -1271,6 +1271,9 @@
             font-weight: var(--fw-medium);
             font-size: 13px;
             position: relative;
+            min-width: 45px;
+            border-radius: 8px;
+            box-sizing: border-box;
         }
         
         /* ========================================
@@ -2997,7 +3000,7 @@
             const progressText = document.getElementById('reportProgressText');
             
             progressContainer.classList.remove('hidden');
-            progressBar.style.width = '0%';
+            progressBar.style.width = '5%';
             progressBar.textContent = '0%';
             progressText.textContent = '🚀 3개 리포트 병렬 생성 시작... (KPI + CPO + Trend)';
             
@@ -3048,7 +3051,8 @@
                                     reportTimes[data.report] = data.time;
                                     
                                     const progress = data.progress;
-                                    progressBar.style.width = `${progress}%`;
+                                    const displayWidth = Math.max(progress, 5); // 최소 5% 너비 보장
+                                    progressBar.style.width = `${displayWidth}%`;
                                     progressBar.textContent = `${progress}%`;
                                     
                                     const completedNames = completedReports.map(r => reportTypeNames[r]).join(', ');

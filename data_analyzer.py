@@ -600,8 +600,30 @@ class ChargingDataAnalyzer:
 
     def generate_insights(self):
         """전체 인사이트 생성"""
+        # 기본 요약 통계
+        summary = self.get_summary_stats()
+        
+        # 충전소/충전기 통계 추가 (get_summary_table에서 가져옴)
+        summary_table = self.get_summary_table()
+        if summary_table and 'total' in summary_table:
+            total_data = summary_table['total']
+            summary['total_cpos'] = total_data.get('cpos', 0)
+            summary['total_stations'] = total_data.get('stations', 0)
+            summary['total_chargers'] = total_data.get('total_chargers', 0)
+            summary['slow_chargers'] = total_data.get('slow_chargers', 0)
+            summary['fast_chargers'] = total_data.get('fast_chargers', 0)
+            
+            # 완속/급속 비율 계산
+            total_chargers = total_data.get('total_chargers', 0)
+            if total_chargers > 0:
+                summary['slow_ratio'] = round(total_data.get('slow_chargers', 0) / total_chargers * 100, 1)
+                summary['fast_ratio'] = round(total_data.get('fast_chargers', 0) / total_chargers * 100, 1)
+            else:
+                summary['slow_ratio'] = 0
+                summary['fast_ratio'] = 0
+        
         insights = {
-            'summary': self.get_summary_stats(),
+            'summary': summary,
             'cpo_analysis': self.analyze_by_cpo(),
             'charger_types': self.analyze_charger_types(),
             'trend': self.trend_analysis(),
