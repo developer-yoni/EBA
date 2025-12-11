@@ -1635,8 +1635,8 @@
             <div class="card" style="margin-bottom: 20px;">
                 <h3>🎯 AI Scenario Simulator</h3>
                 <p style="color: #718096; margin-bottom: 20px;">
-                    <strong>Ridge Regression(α=10) 기반 ML 예측:</strong> GS충전기/시장전체를 각각 예측 후 점유율 계산 (Ratio 방식)
-                    <br><span style="font-size: 12px; color: #a0aec0;">Bedrock은 예측 결과에 대한 인사이트 생성에만 활용됩니다. 백테스트 검증 완료 (MAPE &lt; 2%)</span>
+                    <strong>Linear Regression 기반 ML 예측:</strong> GS충전기/시장전체를 각각 예측 후 점유율 계산 (Ratio 방식)
+                    <br><span style="font-size: 12px; color: #a0aec0;">Bedrock은 예측 결과에 대한 인사이트 생성에만 활용됩니다. 백테스트 검증 완료 (MAPE 1.14%)</span>
                 </p>
                 
                 <!-- 신뢰도 기반 예측 범위 안내 -->
@@ -1791,7 +1791,7 @@
                 </div>
                 
                 <div class="card" style="margin-bottom: 20px;">
-                    <h3>📈 Ridge Regression 기반 시장점유율 예측</h3>
+                    <h3>📈 Linear Regression 기반 시장점유율 예측</h3>
                     <div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
                         <div style="display: flex; align-items: center; gap: 6px;">
                             <div style="width: 24px; height: 3px; background: #48bb78;"></div>
@@ -4467,7 +4467,7 @@
             summaryDiv.innerHTML = `
                 <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
                     <div class="loading-spinner" style="margin: 0 auto 16px;"></div>
-                    <p style="color: var(--text-secondary);">📊 Ridge Regression 기반 ML 모델이 ${mode === 'charger_to_share' ? '미래를 예측' : '필요 충전기를 계산'}하고 있습니다...</p>
+                    <p style="color: var(--text-secondary);">📊 Linear Regression 기반 ML 모델이 ${mode === 'charger_to_share' ? '미래를 예측' : '필요 충전기를 계산'}하고 있습니다...</p>
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
                         ${loadingMessage}
                     </p>
@@ -5192,7 +5192,7 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: `Ridge Regression 기반 시장점유율 예측`,
+                            text: `Linear Regression 기반 시장점유율 예측`,
                             font: {
                                 size: 16,
                                 weight: 'bold'

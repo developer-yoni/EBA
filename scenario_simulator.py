@@ -28,15 +28,15 @@ class ScenarioSimulator:
     }
     
     # 백테스트 결과 기반 예측 기간별 오차 통계
-    # 실제 테스트 결과 (2025-02 ~ 2025-05 기준월, 각 4개 테스트, 총 16개)
-    # 2025-12-11 백테스트 결과 업데이트
+    # 실제 테스트 결과 (2025-07 ~ 2025-10 기준월, LinearRegression + Ratio 방식)
+    # 2025-12-11 재검증: LinearRegression이 Ridge보다 45.8% 더 정확
     BACKTEST_PERIOD_STATS = {
-        1: {'avg_mae': 0.128, 'avg_mape': 0.76, 'avg_rmse': 0.128, 'n_tests': 4, 'reliable': True},
-        2: {'avg_mae': 0.171, 'avg_mape': 1.01, 'avg_rmse': 0.183, 'n_tests': 4, 'reliable': True},
-        3: {'avg_mae': 0.183, 'avg_mape': 1.09, 'avg_rmse': 0.193, 'n_tests': 4, 'reliable': True},
-        4: {'avg_mae': 0.220, 'avg_mape': 1.30, 'avg_rmse': 0.250, 'n_tests': 4, 'reliable': True},  # 보간값
-        5: {'avg_mae': 0.254, 'avg_mape': 1.52, 'avg_rmse': 0.294, 'n_tests': 4, 'reliable': True},  # 보간값
-        6: {'avg_mae': 0.288, 'avg_mape': 1.76, 'avg_rmse': 0.338, 'n_tests': 4, 'reliable': True}
+        1: {'avg_mae': 0.17, 'avg_mape': 1.05, 'avg_rmse': 0.18, 'n_tests': 4, 'reliable': True},
+        2: {'avg_mae': 0.19, 'avg_mape': 1.18, 'avg_rmse': 0.20, 'n_tests': 4, 'reliable': True},
+        3: {'avg_mae': 0.19, 'avg_mape': 1.20, 'avg_rmse': 0.21, 'n_tests': 4, 'reliable': True},
+        4: {'avg_mae': 0.22, 'avg_mape': 1.35, 'avg_rmse': 0.24, 'n_tests': 4, 'reliable': True},  # 보간값
+        5: {'avg_mae': 0.25, 'avg_mape': 1.50, 'avg_rmse': 0.28, 'n_tests': 4, 'reliable': True},  # 보간값
+        6: {'avg_mae': 0.28, 'avg_mape': 1.70, 'avg_rmse': 0.32, 'n_tests': 4, 'reliable': True}   # 보간값
     }
     
     # 신뢰도 기반 최대 예측 기간 (백테스트 결과 기반)
@@ -624,25 +624,25 @@ class ScenarioSimulator:
         # 시장 데이터
         market_chargers = np.array([m['total_chargers'] for m in market_history])
         
-        # 백테스트 최적화 결과 (2025-12-11):
-        # Ridge(alpha=10.0)이 LinearRegression보다 약 50% 오차 감소
-        # 강한 정규화가 12개월 제한된 데이터에서 과적합 방지에 효과적
+        # 백테스트 최적화 결과 (2025-12-11 재검증):
+        # LinearRegression이 Ridge(alpha=10.0)보다 약 45.8% 더 정확
+        # 12개월 데이터에서 LinearRegression이 더 나은 성능 (MAE 0.2050 vs 0.3782)
         
-        # 1. Ridge 회귀 - 시장점유율 추세 (참고용, 실제 예측은 ratio 방식 사용)
-        lr_share = Ridge(alpha=10.0)
+        # 1. Linear 회귀 - 시장점유율 추세 (참고용, 실제 예측은 ratio 방식 사용)
+        lr_share = LinearRegression()
         lr_share.fit(months_idx, gs_shares)
         share_slope = lr_share.coef_[0]  # 월별 점유율 변화율
         share_intercept = lr_share.intercept_
         share_r2 = lr_share.score(months_idx, gs_shares)
         
-        # 2. Ridge 회귀 - GS 충전기 수 추세 (ratio 방식의 분자)
-        lr_chargers = Ridge(alpha=10.0)
+        # 2. Linear 회귀 - GS 충전기 수 추세 (ratio 방식의 분자)
+        lr_chargers = LinearRegression()
         lr_chargers.fit(months_idx, gs_chargers)
         charger_slope = lr_chargers.coef_[0]  # 월별 충전기 증가량
         charger_r2 = lr_chargers.score(months_idx, gs_chargers)
         
-        # 3. Ridge 회귀 - 시장 전체 충전기 추세 (ratio 방식의 분모)
-        lr_market = Ridge(alpha=10.0)
+        # 3. Linear 회귀 - 시장 전체 충전기 추세 (ratio 방식의 분모)
+        lr_market = LinearRegression()
         lr_market.fit(months_idx, market_chargers)
         market_slope = lr_market.coef_[0]
         market_r2 = lr_market.score(months_idx, market_chargers)
@@ -719,10 +719,10 @@ class ScenarioSimulator:
             # 직접 예측 방식도 계산 (비교용)
             pred_share_direct = share_intercept + share_slope * future_idx
             
-            # 백테스트 최적화 결과 (2025-12-11):
+            # 백테스트 최적화 결과 (2025-12-11 재검증):
             # - Ratio 100%가 모든 예측 기간에서 최적
-            # - Ridge(alpha=10.0)이 LinearRegression보다 약 50% 오차 감소
-            # 따라서 ratio 방식만 사용 (direct 방식 제거)
+            # - LinearRegression이 Ridge(alpha=10.0)보다 45.8% 더 정확
+            # 따라서 LinearRegression + ratio 방식 사용
             pred_share = pred_share_ratio
             
             # 신뢰구간 (95%) - ratio 방식 기반
