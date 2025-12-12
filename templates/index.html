@@ -904,14 +904,17 @@
             left: 0;
             width: 100vw;
             height: 100vh;
+            min-height: 100vh;
             background: rgba(0, 0, 0, 0.85);
             backdrop-filter: blur(16px);
             z-index: 1000;
             opacity: 0;
             visibility: hidden;
             transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.4s;
-            overflow: hidden;
+            overflow-y: auto;
+            overflow-x: hidden;
             pointer-events: none;
+            padding: 20px 0;
         }
         
         .modal-backdrop.active {
@@ -923,22 +926,25 @@
         /* 모달 컨테이너 */
         .modal-container {
             background: var(--bg-card);
-            border-radius: 24px;
+            border-radius: 20px;
             box-shadow: var(--shadow-premium), var(--shadow-gold);
             border: 1px solid var(--gold-border);
-            max-width: 90vw;
-            max-height: 90vh;
-            width: 1200px;
+            max-width: 95vw;
+            max-height: 95vh;
+            width: 1400px;
+            min-height: 800px;
             position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
             z-index: 1001;
-            overflow: hidden;
-            transform-origin: center center;
+            overflow: visible;
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
-                        opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-                        left 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-                        top 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                        opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             pointer-events: none;
             opacity: 0;
+            display: flex;
+            flex-direction: column;
         }
         
         .modal-backdrop.active .modal-container {
@@ -957,17 +963,17 @@
         }
         
         .modal-container.modal-opening {
-            transform: scale(0.5);
+            transform: translate(-50%, -50%) scale(0.5);
             opacity: 0;
         }
         
         .modal-container.modal-open {
-            transform: scale(1);
+            transform: translate(-50%, -50%) scale(1);
             opacity: 1;
         }
         
         .modal-container.modal-closing {
-            transform: scale(0.5);
+            transform: translate(-50%, -50%) scale(0.5);
             opacity: 0;
         }
         
@@ -979,6 +985,8 @@
             align-items: center;
             justify-content: space-between;
             background: var(--bg-surface);
+            flex-shrink: 0;
+            border-radius: 24px 24px 0 0;
         }
         
         .modal-title {
@@ -1012,18 +1020,49 @@
         
         /* 모달 콘텐츠 */
         .modal-content {
-            padding: 36px;
+            padding: 40px 48px;
             overflow-y: auto;
-            max-height: calc(90vh - 140px);
+            overflow-x: hidden;
+            flex: 1;
+            min-height: 0;
             background: var(--bg-card);
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-secondary) var(--bg-surface);
+            border-radius: 0 0 20px 20px;
+            line-height: 1.6;
+        }
+        
+        /* 모달 콘텐츠 스크롤바 스타일 */
+        .modal-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .modal-content::-webkit-scrollbar-track {
+            background: var(--bg-surface);
+            border-radius: 4px;
+        }
+        
+        .modal-content::-webkit-scrollbar-thumb {
+            background: var(--border-secondary);
+            border-radius: 4px;
+        }
+        
+        .modal-content::-webkit-scrollbar-thumb:hover {
+            background: var(--brand-primary);
         }
         
         /* 확대된 차트 컨테이너 */
         .modal-chart-container {
             width: 100%;
-            height: 500px;
-            margin-bottom: 24px;
+            height: 600px;
+            margin-bottom: 32px;
             position: relative;
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-primary);
         }
         
         .modal-chart-container canvas {
@@ -1034,99 +1073,150 @@
         /* 모달 내 상세 정보 */
         .modal-details {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
-            margin-top: 24px;
+            grid-template-columns: 1fr;
+            gap: 32px;
+            margin-top: 32px;
         }
         
         .modal-detail-section {
             background: var(--bg-surface);
-            padding: 20px;
-            border-radius: 8px;
+            padding: 28px;
+            border-radius: 12px;
             border: 1px solid var(--border-primary);
+            box-shadow: var(--shadow-sm);
         }
         
-        /* 모달 테이블 텍스트 크기 조정 */
+        /* 모달 테이블 가독성 개선 */
         .modal-content table {
-            font-size: 10px !important;
+            font-size: 14px !important;
+            margin: 24px 0;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
         }
         
         .modal-content table th,
         .modal-content table td {
-            padding: 6px 4px !important;
-            white-space: nowrap !important;
-            font-size: 10px !important;
-            text-overflow: ellipsis;
-            overflow: hidden;
+            padding: 12px 16px !important;
+            font-size: 14px !important;
+            border-bottom: 1px solid var(--border-primary);
+            text-align: center;
+            vertical-align: middle;
         }
         
         .modal-content table th {
-            font-size: 9px !important;
+            font-size: 13px !important;
             font-weight: var(--fw-semibold) !important;
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .modal-content table td {
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            transition: background-color 0.2s ease;
+        }
+        
+        .modal-content table tbody tr:hover td {
+            background: var(--bg-surface);
+            color: var(--text-primary);
         }
         
         /* 시장점유율 모달 테이블 특별 조정 */
         .modal-content #marketShareTable table {
-            font-size: 9px !important;
+            font-size: 13px !important;
         }
         
         .modal-content #marketShareTable th,
         .modal-content #marketShareTable td {
-            padding: 4px 3px !important;
-            font-size: 9px !important;
-            min-width: 60px;
+            padding: 10px 12px !important;
+            font-size: 13px !important;
+            min-width: 80px;
         }
         
         .modal-content #marketShareTable th {
-            font-size: 8px !important;
+            font-size: 12px !important;
         }
         
         .modal-detail-title {
-            font-size: 16px;
-            font-weight: var(--fw-semibold);
+            font-size: 20px;
+            font-weight: var(--fw-bold);
             color: var(--text-primary);
-            margin-bottom: 12px;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--brand-primary);
         }
         
         .modal-stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 20px;
+            margin: 24px 0;
         }
         
         .modal-stat-item {
             text-align: center;
-            padding: 12px;
-            background: white;
-            border-radius: 8px;
-            border: 1px solid #e5e7eb;
+            padding: 20px;
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border-primary);
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+        
+        .modal-stat-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
         
         .modal-stat-value {
-            font-size: 20px;
+            font-size: 28px;
             font-weight: var(--fw-bold);
-            color: var(--accent-primary);
-            margin-bottom: 4px;
+            color: var(--brand-primary);
+            margin-bottom: 8px;
+            line-height: 1.2;
         }
         
         .modal-stat-label {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            font-weight: var(--fw-medium);
         }
         
         /* 모달 열릴 때 body 스크롤 방지 - 스크롤바 공간 유지 */
         body.modal-open {
             overflow: hidden;
             padding-right: var(--scrollbar-width, 0px);
+            position: fixed;
+            width: 100%;
         }
         
         /* 반응형 */
-        @media (max-width: 768px) {
+        @media (max-width: 1200px) {
             .modal-container {
                 width: 95vw;
                 max-height: 95vh;
+            }
+            
+            .modal-content {
+                padding: 32px 36px;
+            }
+            
+            .modal-chart-container {
+                height: 500px;
+                padding: 16px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .modal-container {
+                width: 98vw;
+                max-height: 98vh;
+                min-height: 600px;
             }
             
             .modal-header {
@@ -1134,15 +1224,32 @@
             }
             
             .modal-content {
-                padding: 24px;
+                padding: 24px 20px;
             }
             
             .modal-details {
                 grid-template-columns: 1fr;
+                gap: 20px;
             }
             
             .modal-chart-container {
-                height: 300px;
+                height: 400px;
+                padding: 12px;
+            }
+            
+            .modal-stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                gap: 16px;
+            }
+            
+            .modal-stat-value {
+                font-size: 24px;
+            }
+            
+            .modal-content table th,
+            .modal-content table td {
+                padding: 8px 12px !important;
+                font-size: 12px !important;
             }
         }
         
@@ -3743,10 +3850,30 @@
                     closeCardModal();
                 }
             });
+            
+            // 화면 크기 변경 시 모달 크기 재조정
+            window.addEventListener('resize', () => {
+                const modalBackdrop = document.getElementById('modalBackdrop');
+                const modalContainer = modalBackdrop?.querySelector('.modal-container');
+                
+                if (modalBackdrop && modalBackdrop.classList.contains('active') && modalContainer) {
+                    // 새로운 뷰포트 크기에 맞춰 모달 크기 재계산
+                    const viewportWidth = window.innerWidth;
+                    const viewportHeight = window.innerHeight;
+                    const modalWidth = Math.min(1400, viewportWidth * 0.95);
+                    const modalHeight = Math.min(viewportHeight * 0.95, Math.max(800, viewportHeight * 0.85));
+                    
+                    modalContainer.style.width = `${modalWidth}px`;
+                    modalContainer.style.height = `${modalHeight}px`;
+                    
+                    console.log('📐 모달 크기 재조정:', { modalWidth, modalHeight });
+                }
+            });
         }
         
         // 마지막 클릭 카드 위치 저장
         let lastClickedCardRect = null;
+        let savedScrollPosition = 0;
         
         // 스크롤바 너비 계산
         function getScrollbarWidth() {
@@ -3769,38 +3896,47 @@
             const scrollbarWidth = getScrollbarWidth();
             document.documentElement.style.setProperty('--scrollbar-width', `${scrollbarWidth}px`);
             
-            // 클릭한 카드의 위치 계산
+            // 현재 스크롤 위치 저장 (body 고정 시 복원용)
+            savedScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+            document.body.style.top = `-${savedScrollPosition}px`;
+            
+            console.log('💾 스크롤 위치 저장:', savedScrollPosition);
+            
+            // 클릭한 카드의 위치 계산 (애니메이션 시작점용)
             const cardRect = cardElement.getBoundingClientRect();
             lastClickedCardRect = cardRect;
-            const cardCenterX = cardRect.left + cardRect.width / 2;
-            const cardCenterY = cardRect.top + cardRect.height / 2;
             
-            // 모달 크기 계산
+            console.log('📍 카드 위치:', cardRect);
+            
+            // 모달 크기 계산 (반응형) - 더 큰 크기로 설정
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            const modalWidth = Math.min(1200, viewportWidth * 0.9);
-            const modalHeight = Math.min(viewportHeight * 0.9, 800);
+            const modalWidth = Math.min(1400, viewportWidth * 0.95);
+            const modalHeight = Math.min(viewportHeight * 0.95, Math.max(800, viewportHeight * 0.85));
             
-            // 최종 위치 (화면 중앙)
-            const finalLeft = (viewportWidth - modalWidth) / 2;
-            const finalTop = (viewportHeight - modalHeight) / 2;
+            console.log('📐 모달 크기:', { modalWidth, modalHeight, viewportWidth, viewportHeight });
             
-            // 초기 위치 설정 (클릭한 카드 중심에서 시작)
+            // 모달 크기 설정 (CSS의 fixed positioning과 transform으로 중앙 배치됨)
             modalContainer.style.width = `${modalWidth}px`;
-            modalContainer.style.left = `${cardCenterX - modalWidth / 2}px`;
-            modalContainer.style.top = `${cardCenterY - modalHeight / 2}px`;
-            modalContainer.classList.remove('modal-open', 'modal-closing');
-            modalContainer.classList.add('modal-opening');
+            modalContainer.style.height = `${modalHeight}px`;
+            
+            // 초기 상태: 작은 크기로 시작
+            modalContainer.style.transform = 'translate(-50%, -50%) scale(0.1)';
+            modalContainer.style.opacity = '0';
             
             // 배경 표시 및 스크롤 방지
             modalBackdrop.classList.add('active');
             document.body.classList.add('modal-open');
             
-            // 다음 프레임에서 최종 위치로 애니메이션
+            // 모달 상태 초기화
+            modalContainer.classList.remove('modal-open', 'modal-closing');
+            modalContainer.classList.add('modal-opening');
+            
+            // 다음 프레임에서 확대 애니메이션 시작
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
-                    modalContainer.style.left = `${finalLeft}px`;
-                    modalContainer.style.top = `${finalTop}px`;
+                    modalContainer.style.transform = 'translate(-50%, -50%) scale(1)';
+                    modalContainer.style.opacity = '1';
                     modalContainer.classList.remove('modal-opening');
                     modalContainer.classList.add('modal-open');
                 });
@@ -3941,22 +4077,30 @@
             const modalContainer = modalBackdrop?.querySelector('.modal-container');
             
             if (modalBackdrop && modalBackdrop.classList.contains('active')) {
-                // 닫기 애니메이션 - 원래 카드 위치로 돌아가기
-                if (modalContainer && lastClickedCardRect) {
-                    const cardCenterX = lastClickedCardRect.left + lastClickedCardRect.width / 2;
-                    const cardCenterY = lastClickedCardRect.top + lastClickedCardRect.height / 2;
-                    const modalWidth = modalContainer.offsetWidth;
-                    const modalHeight = modalContainer.offsetHeight;
-                    
+                // 닫기 애니메이션 - 중앙에서 축소
+                if (modalContainer) {
                     modalContainer.classList.remove('modal-open');
                     modalContainer.classList.add('modal-closing');
-                    modalContainer.style.left = `${cardCenterX - modalWidth / 2}px`;
-                    modalContainer.style.top = `${cardCenterY - modalHeight / 2}px`;
+                    modalContainer.style.transform = 'translate(-50%, -50%) scale(0.1)';
+                    modalContainer.style.opacity = '0';
                 }
                 
                 // 배경 숨기기
                 modalBackdrop.classList.remove('active');
                 document.body.classList.remove('modal-open');
+                
+                // 스크롤 위치 복원
+                document.body.style.position = '';
+                document.body.style.top = '';
+                document.body.style.width = '';
+                
+                console.log('🔄 스크롤 위치 복원:', savedScrollPosition);
+                
+                // 다음 프레임에서 스크롤 복원 (DOM 업데이트 후)
+                requestAnimationFrame(() => {
+                    window.scrollTo(0, savedScrollPosition);
+                    savedScrollPosition = 0;
+                });
                 
                 // 스크롤바 너비 CSS 변수 초기화
                 document.documentElement.style.setProperty('--scrollbar-width', '0px');
