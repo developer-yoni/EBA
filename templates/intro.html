@@ -568,6 +568,17 @@
             
             const totalMarketChargers = summaryTable.total?.total_chargers || 459523;
             
+            // TOP10 CPO 데이터 변환 (API에서 받은 데이터 사용)
+            let topCposData = [];
+            if (topPerformers && topPerformers.length > 0) {
+                topCposData = topPerformers.slice(0, 10).map((cpo, idx) => ({
+                    rank: idx + 1,
+                    name: cpo.cpo,
+                    chargers: cpo.chargers,
+                    share: totalMarketChargers > 0 ? ((cpo.chargers / totalMarketChargers) * 100).toFixed(1) + '%' : '-'
+                }));
+            }
+            
             return {
                 gsKpi: {
                     marketShare: gsKpi.market_share || 16.1,
@@ -578,12 +589,7 @@
                 },
                 chargerTrend: apiData.charts?.total_trend || null,
                 cumulativeChargers: apiData.charts?.cumulative_chargers || null,
-                topCpos: topPerformers.map((cpo, idx) => ({
-                    rank: idx + 1,
-                    name: cpo.cpo,
-                    chargers: cpo.chargers,
-                    share: totalMarketChargers > 0 ? ((cpo.chargers / totalMarketChargers) * 100).toFixed(1) + '%' : '-'
-                })),
+                topCpos: topCposData,
                 totalDataPoints: totalMarketChargers,
                 totalMarketChargers: totalMarketChargers,
                 latestMonth: latestMonth,

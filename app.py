@@ -416,12 +416,26 @@ def get_dashboard():
                     }
                     print(f'📊 GS차지비 KPI 생성 완료', flush=True)
         
+        # 최신 월(end_month) 기준 TOP10 CPO 생성
+        top_performers_data = None
+        latest_month_for_top = end_month or (selected_months[0] if selected_months else None)
+        if latest_month_for_top and cache['full_data'] is not None:
+            latest_month_data = cache['full_data'][cache['full_data']['snapshot_month'] == latest_month_for_top]
+            if len(latest_month_data) > 0:
+                latest_analyzer = ChargingDataAnalyzer(latest_month_data)
+                top_performers_data = latest_analyzer.top_performers(10)
+                print(f'📊 TOP10 CPO 생성 완료 (기준월: {latest_month_for_top})', flush=True)
+        
+        # top_performers_data가 없으면 current_insights에서 가져오기
+        if not top_performers_data:
+            top_performers_data = current_insights.get('top_performers')
+        
         # 대시보드 데이터 구성 (선택한 기간 기준)
         dashboard = {
             'summary': current_insights.get('summary'),
             'summary_table': summary_table,
             'gs_kpi': gs_kpi,
-            'top_performers': current_insights.get('top_performers'),
+            'top_performers': top_performers_data,
             'target_month': target_month,
             'start_month': start_month,
             'end_month': end_month,
