@@ -929,9 +929,10 @@
             max-width: 90vw;
             max-height: 90vh;
             width: 1200px;
-            position: relative;
+            position: absolute;
             overflow: hidden;
-            transform: scale(0.8) translateY(40px);
+            transform: scale(0.5);
+            opacity: 0;
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
@@ -946,7 +947,8 @@
         }
         
         .modal-backdrop.active .modal-container {
-            transform: scale(1) translateY(0);
+            transform: scale(1);
+            opacity: 1;
         }
         
         /* 모달 헤더 */
@@ -3689,7 +3691,7 @@
                         e.preventDefault();
                         e.stopPropagation();
                         console.log('🖱️ 카드 클릭됨:', canvas.id);
-                        openCardModal(card, canvas);
+                        openCardModal(card, canvas, e);
                     });
                 } else {
                     console.log('📄 일반 카드 (차트 없음):', card);
@@ -3721,15 +3723,42 @@
         }
         
         // 카드 모달 열기
-        function openCardModal(cardElement, canvasElement) {
+        function openCardModal(cardElement, canvasElement, clickEvent) {
             const modalBackdrop = document.getElementById('modalBackdrop');
             const modalTitle = document.getElementById('modalTitle');
             const modalChartContainer = document.getElementById('modalChartContainer');
             const modalDetails = document.getElementById('modalDetails');
+            const modalContainer = modalBackdrop.querySelector('.modal-container');
             
             if (!modalBackdrop) return;
             
             console.log('🔍 모달 열기:', canvasElement.id);
+            
+            // 클릭한 카드의 위치 계산
+            const cardRect = cardElement.getBoundingClientRect();
+            const cardCenterX = cardRect.left + cardRect.width / 2;
+            const cardCenterY = cardRect.top + cardRect.height / 2;
+            
+            // 모달 위치 계산 (화면 중앙으로 이동하되, 클릭 위치에서 시작)
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const modalWidth = Math.min(1200, viewportWidth * 0.9);
+            const modalHeight = Math.min(viewportHeight * 0.9, 800);
+            
+            // 최종 위치 (화면 중앙)
+            const finalLeft = (viewportWidth - modalWidth) / 2;
+            const finalTop = (viewportHeight - modalHeight) / 2;
+            
+            // 초기 위치 설정 (클릭한 카드 중심)
+            modalContainer.style.left = `${cardCenterX - modalWidth / 2}px`;
+            modalContainer.style.top = `${cardCenterY - modalHeight / 2}px`;
+            modalContainer.style.width = `${modalWidth}px`;
+            
+            // 애니메이션으로 최종 위치로 이동
+            requestAnimationFrame(() => {
+                modalContainer.style.left = `${finalLeft}px`;
+                modalContainer.style.top = `${finalTop}px`;
+            });
             
             // 카드 제목 가져오기
             const cardTitle = cardElement.querySelector('h3');
@@ -3863,6 +3892,7 @@
         // 카드 모달 닫기
         function closeCardModal() {
             const modalBackdrop = document.getElementById('modalBackdrop');
+            const modalContainer = modalBackdrop?.querySelector('.modal-container');
             
             if (modalBackdrop && modalBackdrop.classList.contains('active')) {
                 modalBackdrop.classList.remove('active');
@@ -3874,12 +3904,17 @@
                     currentModalChart = null;
                 }
                 
-                // 모달 내용 정리
+                // 모달 내용 정리 및 위치 초기화
                 setTimeout(() => {
                     const modalChartContainer = document.getElementById('modalChartContainer');
                     const modalDetails = document.getElementById('modalDetails');
                     if (modalChartContainer) modalChartContainer.innerHTML = '';
                     if (modalDetails) modalDetails.innerHTML = '';
+                    // 위치 초기화
+                    if (modalContainer) {
+                        modalContainer.style.left = '';
+                        modalContainer.style.top = '';
+                    }
                 }, 400);
             }
         }

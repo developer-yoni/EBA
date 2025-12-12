@@ -19,9 +19,11 @@
 
         #main-hero { position: relative; width: 100%; height: 100vh; background: #050508; overflow: hidden; }
         #main-hero canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        .hero-typography { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; display: flex; align-items: center; justify-content: center; white-space: nowrap; font-size: clamp(28px, 6vw, 90px); font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
-        .hero-char { display: inline-block; color: #fff; opacity: 0; transform: translateY(50px) rotateX(-90deg); }
-        .hero-char.space { width: 0.3em; }
+        .hero-typography { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; display: flex; align-items: center; white-space: nowrap; font-size: clamp(28px, 7vw, 100px); font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
+        .char-g, .char-s1 { display: inline-block; color: #fff; }
+        .hidden-text { display: inline-block; opacity: 0; max-width: 0; overflow: hidden; color: #fff; white-space: nowrap; }
+        .char-s2, .text-tudio { display: inline-block; opacity: 0; max-width: 0; overflow: hidden; color: #fff; }
+        .studio-group { display: inline-flex; white-space: nowrap; }
         .hero-enter-btn { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 100; padding: 18px 50px; font-size: 18px; font-weight: 700; color: #000; background: linear-gradient(135deg, #FFD700, #FFA500); border: none; border-radius: 50px; cursor: pointer; opacity: 0; text-decoration: none; text-transform: uppercase; letter-spacing: 2px; box-shadow: 0 4px 30px rgba(255, 215, 0, 0.4); transition: all 0.3s ease; }
         .hero-enter-btn.visible { opacity: 1; }
         .hero-enter-btn:hover { transform: translateX(-50%) translateY(-3px); box-shadow: 0 8px 40px rgba(255, 215, 0, 0.6); }
@@ -181,8 +183,8 @@
 
     <section id="main-hero">
         <canvas id="hero-canvas"></canvas>
-        <div class="hero-typography" id="heroTypography">
-            <span class="hero-char">G</span><span class="hero-char">S</span><span class="hero-char space"></span><span class="hero-char">I</span><span class="hero-char">N</span><span class="hero-char">S</span><span class="hero-char">I</span><span class="hero-char">G</span><span class="hero-char">H</span><span class="hero-char">T</span><span class="hero-char space"></span><span class="hero-char">S</span><span class="hero-char">T</span><span class="hero-char">U</span><span class="hero-char">D</span><span class="hero-char">I</span><span class="hero-char">O</span>
+        <div class="hero-typography">
+            <span class="char-g">G</span><span class="char-s1">S</span><span class="hidden-text">S Insight </span><span class="studio-group"><span class="char-s2">S</span><span class="text-tudio">TUDIO</span></span>
         </div>
         <a href="#scene-authority" class="hero-enter-btn" id="heroEnterBtn">Explore Data ↓</a>
     </section>
@@ -285,36 +287,35 @@
             }, 60);
         }
 
-        // 타이포그래피 애니메이션: GS INSIGHT STUDIO 글자가 하나씩 펼쳐짐
+        // 타이포그래피 애니메이션: GS → G STUDIO → GS Insight STUDIO
         function initHeroTypographyAnimation() {
-            const chars = document.querySelectorAll('.hero-char');
-            const tl = gsap.timeline({ delay: 0.3 });
+            const tl = gsap.timeline({ delay: 0.5 });
             
-            // 각 글자가 순차적으로 펼쳐지는 애니메이션
-            chars.forEach((char, index) => {
-                tl.to(char, {
-                    opacity: 1,
-                    y: 0,
-                    rotateX: 0,
-                    duration: 0.5,
-                    ease: 'back.out(1.7)'
-                }, index * 0.08);
-            });
+            // 1단계: S 사라지고 STUDIO 나타남
+            tl.to('.char-s1', { opacity: 0, maxWidth: 0, duration: 0.8 }, 0);
+            tl.to('.char-s2', { opacity: 1, maxWidth: '1em', duration: 0.8 }, 0.3);
+            tl.to('.text-tudio', { opacity: 1, maxWidth: '5em', duration: 0.8 }, 0.3);
             
-            // 버튼 표시
+            // 2단계: STUDIO 오른쪽으로 이동
+            tl.to('.studio-group', { x: 10, duration: 1 }, 1.2);
+            
+            // 3단계: "S Insight " 나타남
+            tl.to('.hidden-text', { opacity: 1, maxWidth: '8em', duration: 1.2 }, 1.8);
+            
+            // 4단계: 버튼 표시
             tl.to('#heroEnterBtn', { 
                 opacity: 1, 
                 duration: 0.6, 
                 onComplete: () => document.getElementById('heroEnterBtn').classList.add('visible') 
-            }, chars.length * 0.08 + 0.5);
+            }, 3.2);
             
             // 번개 스케일
             if (heroLightningMesh) {
-                tl.to(heroLightningMesh.scale, { x: 0.7, y: 0.7, z: 0.7, duration: 2 }, 0.5);
-                tl.to(heroLightningMesh.position, { y: -1.5, duration: 2 }, 0.5);
+                tl.to(heroLightningMesh.scale, { x: 0.7, y: 0.7, z: 0.7, duration: 2 }, 1);
+                tl.to(heroLightningMesh.position, { y: -1.5, duration: 2 }, 1);
             }
             
-            tl.call(() => { initScrollAnimations(); loadDashboardData(); }, null, chars.length * 0.08 + 1.5);
+            tl.call(() => { initScrollAnimations(); loadDashboardData(); }, null, 4);
         }
 
         // Three.js 캔버스들
@@ -503,7 +504,7 @@
             gsap.to(obj, { value: targetValue, duration: duration, ease: 'power2.out', onUpdate: () => { element.textContent = decimals > 0 ? obj.value.toFixed(decimals) : Math.floor(obj.value).toLocaleString(); } });
         }
 
-        // API에서 대시보드 데이터 로딩
+        // API에서 대시보드 데이터 로딩 (RAG 전체 데이터에서 최근 1년)
         async function loadDashboardData() {
             try {
                 // 먼저 데이터 로드
@@ -517,19 +518,36 @@
                     return;
                 }
 
-                // 최신 월 가져오기
-                const latestMonth = loadResult.latest_month || loadResult.unique_months?.[0];
+                // 전체 월 목록 (정렬됨)
+                const allMonths = loadResult.unique_months || [];
+                const latestMonth = allMonths[0]; // 가장 최신 월
                 
-                // 대시보드 데이터 요청
+                // 최근 12개월 계산
+                let recent12Months = allMonths.slice(0, 12);
+                if (recent12Months.length < 12) {
+                    recent12Months = allMonths; // 12개월 미만이면 전체 사용
+                }
+                
+                // 시작월과 종료월
+                const startMonth = recent12Months[recent12Months.length - 1];
+                const endMonth = latestMonth;
+                
+                console.log(`📅 인트로 차트 기간: ${startMonth} ~ ${endMonth} (${recent12Months.length}개월)`);
+                
+                // 대시보드 데이터 요청 (최근 12개월 전체)
                 const dashboardResponse = await fetch(`${API_BASE}/dashboard`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ months: [latestMonth], startMonth: latestMonth, endMonth: latestMonth })
+                    body: JSON.stringify({ 
+                        months: recent12Months, 
+                        startMonth: startMonth, 
+                        endMonth: endMonth 
+                    })
                 });
                 const dashboardResult = await dashboardResponse.json();
                 
                 if (dashboardResult.success && dashboardResult.dashboard) {
-                    dashboardData = transformApiData(dashboardResult.dashboard, latestMonth);
+                    dashboardData = transformApiData(dashboardResult.dashboard, latestMonth, startMonth);
                     dataLoaded = true;
                 } else {
                     dashboardData = getSampleData();
@@ -543,7 +561,7 @@
             }
         }
 
-        function transformApiData(apiData, latestMonth) {
+        function transformApiData(apiData, latestMonth, startMonth) {
             const gsKpi = apiData.gs_kpi?.current || {};
             const topPerformers = apiData.top_performers?.ranking || [];
             const summaryTable = apiData.summary_table || {};
@@ -568,7 +586,8 @@
                 })),
                 totalDataPoints: totalMarketChargers,
                 totalMarketChargers: totalMarketChargers,
-                latestMonth: latestMonth
+                latestMonth: latestMonth,
+                startMonth: startMonth
             };
         }
         
