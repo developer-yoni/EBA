@@ -1599,8 +1599,30 @@
                         EV Infa Data Analytics
                     </div>
                 </div>
-                <div style="padding: 8px 16px; background: var(--brand-light); border: 1px solid var(--brand-border); border-radius: 8px;">
-                    <span id="dataStatus" style="font-size: 13px; font-weight: var(--fw-medium); color: var(--brand-primary);">🔄 데이터 초기화 중...</span>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="padding: 8px 16px; background: var(--brand-light); border: 1px solid var(--brand-border); border-radius: 8px;">
+                        <span id="dataStatus" style="font-size: 13px; font-weight: var(--fw-medium); color: var(--brand-primary);">🔄 데이터 초기화 중...</span>
+                    </div>
+                    <button id="homeBtn" onclick="goToIntro()" style="
+                        background: var(--brand-gradient);
+                        color: white;
+                        border: none;
+                        padding: 8px 12px;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-size: 16px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        transition: all 0.2s ease;
+                        box-shadow: var(--shadow-sm);
+                        min-width: 40px;
+                        height: 40px;
+                    " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='var(--shadow-md)'" 
+                       onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)'"
+                       title="인트로 페이지로 이동">
+                        🏠
+                    </button>
                 </div>
             </div>
             
@@ -1982,6 +2004,12 @@
             cumulativeChargers: null,
             top5MarketShare: null
         };
+        
+        // 인트로 페이지로 이동 함수
+        function goToIntro() {
+            // 인트로 서버 URL로 이동
+            window.location.href = 'http://127.0.0.1:5001';
+        }
         
         // 탭 전환 함수
         function switchTab(tabName) {

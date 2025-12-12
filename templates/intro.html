@@ -79,6 +79,40 @@
         .enter-btn { position: fixed; bottom: 40px; right: 40px; z-index: 100; padding: 16px 40px; font-size: 16px; font-weight: 700; color: #000; background: linear-gradient(135deg, #FFD700, #FFA500); border: none; border-radius: 50px; cursor: pointer; opacity: 0; text-decoration: none; text-transform: uppercase; box-shadow: 0 4px 30px rgba(255, 215, 0, 0.4); transition: all 0.3s ease; }
         .enter-btn.visible { opacity: 1; }
         .enter-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 40px rgba(255, 215, 0, 0.6); }
+        
+        /* 대시보드 바로가기 버튼 */
+        .dashboard-btn { 
+            position: absolute; 
+            bottom: 80px; 
+            left: 50%; 
+            transform: translateX(calc(-50% + 200px)); 
+            z-index: 100; 
+            width: 60px; 
+            height: 60px; 
+            font-size: 24px; 
+            font-weight: 900; 
+            color: #000; 
+            background: linear-gradient(135deg, #FFD700, #FFA500); 
+            border: none; 
+            border-radius: 50%; 
+            cursor: pointer; 
+            opacity: 0; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            box-shadow: 0 4px 30px rgba(255, 215, 0, 0.4); 
+            transition: all 0.3s ease; 
+        }
+        .dashboard-btn.visible { opacity: 1; }
+        .dashboard-btn:hover { 
+            transform: translateX(calc(-50% + 200px)) translateY(-3px) scale(1.05); 
+            box-shadow: 0 8px 40px rgba(255, 215, 0, 0.6); 
+        }
+        .dashboard-btn-icon {
+            font-size: 28px;
+            line-height: 1;
+            transform: translateX(2px);
+        }
 
         /* 페이지 전환 효과 */
         .page-transition-overlay {
@@ -187,6 +221,11 @@
             <span class="char-g">G</span><span class="char-s1">S</span><span class="hidden-text">S Insight </span><span class="studio-group"><span class="char-s2">S</span><span class="text-tudio">TUDIO</span></span>
         </div>
         <a href="#scene-authority" class="hero-enter-btn" id="heroEnterBtn">Explore Data ↓</a>
+        
+        <!-- 대시보드 바로가기 버튼 -->
+        <button class="dashboard-btn" id="dashboardBtn" onclick="goDirectToDashboard()" title="대시보드로 바로 이동">
+            <span class="dashboard-btn-icon">»</span>
+        </button>
     </section>
 
     <section class="scroll-section" id="scene-authority">
@@ -302,12 +341,17 @@
             // 3단계: "S Insight " 나타남
             tl.to('.hidden-text', { opacity: 1, maxWidth: '8em', duration: 1.2 }, 1.8);
             
-            // 4단계: 버튼 표시
+            // 4단계: 버튼들 표시
             tl.to('#heroEnterBtn', { 
                 opacity: 1, 
                 duration: 0.6, 
                 onComplete: () => document.getElementById('heroEnterBtn').classList.add('visible') 
             }, 3.2);
+            tl.to('#dashboardBtn', { 
+                opacity: 1, 
+                duration: 0.6, 
+                onComplete: () => document.getElementById('dashboardBtn').classList.add('visible') 
+            }, 3.4);
             
             // 번개 스케일
             if (heroLightningMesh) {
@@ -494,7 +538,12 @@
                     }
                 }
             });
-            ScrollTrigger.create({ trigger: '#horizontal-section', start: 'top top', onEnter: () => document.getElementById('enterBtn').classList.add('visible'), onLeaveBack: () => document.getElementById('enterBtn').classList.remove('visible') });
+            ScrollTrigger.create({ 
+                trigger: '#horizontal-section', 
+                start: 'top top', 
+                onEnter: () => document.getElementById('enterBtn').classList.add('visible'), 
+                onLeaveBack: () => document.getElementById('enterBtn').classList.remove('visible')
+            });
         }
 
         function animateCounter(elementId, targetValue, duration, decimals) {
@@ -710,6 +759,11 @@
             container.innerHTML = html;
         }
 
+        // 대시보드 바로가기 함수
+        function goDirectToDashboard() {
+            window.location.href = '/dashboard';
+        }
+        
         // 페이지 전환 함수
         function navigateToDashboard() {
             const overlay = document.getElementById('pageTransition');
