@@ -205,7 +205,10 @@ class ImprovedMLPredictorV2:
             'ensemble_weights': self.model_weights,
             'confidence': {
                 'score': round(confidence_score, 1),
-                'level': 'HIGH' if confidence_score >= 80 else 'MEDIUM' if confidence_score >= 60 else 'LOW',
+                # ML LinearRegression 기반 신뢰도 레벨 (2025-12-12)
+                # HIGH: 95% 이상, MEDIUM: 90-95%, LOW: 90% 미만
+                # 참고: 실제 레벨은 scenario_simulator의 _calculate_intuitive_confidence에서 결정됨
+                'level': 'HIGH' if confidence_score >= 95 else 'MEDIUM' if confidence_score >= 90 else 'LOW',
                 'factors': {
                     'data_score': round(data_score, 1),
                     'trend_score': round(trend_score, 1),

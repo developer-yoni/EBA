@@ -200,8 +200,9 @@ class BacktestSimulator:
             },
             'confidence': {
                 'score': round(confidence_score, 2),
-                # 백테스트 기반 조정된 경계: HIGH >= 80, MEDIUM >= 60, LOW < 60
-                'level': 'HIGH' if confidence_score >= 80 else 'MEDIUM' if confidence_score >= 60 else 'LOW',
+                # ML LinearRegression 기반 신뢰도 레벨 (2025-12-12)
+                # HIGH: 95% 이상, MEDIUM: 90-95%, LOW: 90% 미만
+                'level': 'HIGH' if confidence_score >= 95 else 'MEDIUM' if confidence_score >= 90 else 'LOW',
                 'factors': {
                     'data_score': round(data_score, 1),
                     'trend_score': round(trend_score, 1),

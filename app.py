@@ -1438,6 +1438,11 @@ def scenario_simulator():
                 chart_data = simulator.generate_chart_data(prediction)
                 
                 # 응답 구성
+                # ML 분석 결과에서 신뢰도 정보 추출 (R² 기반)
+                ml_analysis = prediction.get('ml_analysis', {})
+                ml_confidence = ml_analysis.get('confidence', {})
+                intuitive_confidence = ml_confidence.get('intuitive', {})
+                
                 response = {
                     'success': True,
                     'meta': prediction.get('meta', {}),
@@ -1449,8 +1454,9 @@ def scenario_simulator():
                     'history': prediction.get('history', []),
                     'actual_future_data': prediction.get('actual_future_data', []),
                     'confidence': {
-                        'level': prediction.get('confidence_level', 'MEDIUM'),
-                        'reason': prediction.get('confidence_reason', '')
+                        'level': ml_confidence.get('level', 'MEDIUM'),
+                        'reason': prediction.get('confidence_reason', ''),
+                        'intuitive': intuitive_confidence  # ML R² 기반 신뢰도 정보
                     }
                 }
                 

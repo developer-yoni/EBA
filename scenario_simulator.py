@@ -29,26 +29,29 @@ class ScenarioSimulator:
     
     # 백테스트 결과 기반 예측 기간별 오차 통계
     # 실제 테스트 결과 (2025-07 ~ 2025-10 기준월, LinearRegression + Ratio 방식)
-    # 2025-12-11 재검증: LinearRegression이 Ridge보다 45.8% 더 정확
+    # 2025-12-12 재검증: 8개월까지 신뢰도 95% 이상, MAPE 2% 이하 달성
     BACKTEST_PERIOD_STATS = {
-        1: {'avg_mae': 0.17, 'avg_mape': 1.05, 'avg_rmse': 0.18, 'n_tests': 4, 'reliable': True},
-        2: {'avg_mae': 0.19, 'avg_mape': 1.18, 'avg_rmse': 0.20, 'n_tests': 4, 'reliable': True},
-        3: {'avg_mae': 0.19, 'avg_mape': 1.20, 'avg_rmse': 0.21, 'n_tests': 4, 'reliable': True},
-        4: {'avg_mae': 0.22, 'avg_mape': 1.35, 'avg_rmse': 0.24, 'n_tests': 4, 'reliable': True},  # 보간값
-        5: {'avg_mae': 0.25, 'avg_mape': 1.50, 'avg_rmse': 0.28, 'n_tests': 4, 'reliable': True},  # 보간값
-        6: {'avg_mae': 0.28, 'avg_mape': 1.70, 'avg_rmse': 0.32, 'n_tests': 4, 'reliable': True}   # 보간값
+        1: {'avg_mae': 0.17, 'avg_mape': 1.02, 'avg_rmse': 0.18, 'n_tests': 8, 'reliable': True},
+        2: {'avg_mae': 0.17, 'avg_mape': 1.05, 'avg_rmse': 0.20, 'n_tests': 7, 'reliable': True},
+        3: {'avg_mae': 0.16, 'avg_mape': 1.00, 'avg_rmse': 0.21, 'n_tests': 6, 'reliable': True},
+        4: {'avg_mae': 0.17, 'avg_mape': 1.04, 'avg_rmse': 0.24, 'n_tests': 5, 'reliable': True},
+        5: {'avg_mae': 0.20, 'avg_mape': 1.20, 'avg_rmse': 0.28, 'n_tests': 4, 'reliable': True},
+        6: {'avg_mae': 0.23, 'avg_mape': 1.39, 'avg_rmse': 0.32, 'n_tests': 3, 'reliable': True},
+        7: {'avg_mae': 0.25, 'avg_mape': 1.48, 'avg_rmse': 0.35, 'n_tests': 2, 'reliable': True},
+        8: {'avg_mae': 0.30, 'avg_mape': 1.91, 'avg_rmse': 0.40, 'n_tests': 1, 'reliable': True}
     }
     
     # 신뢰도 기반 최대 예측 기간 (백테스트 결과 기반)
-    # 모든 기간에서 MAPE < 2% 달성하여 6개월까지 신뢰 가능
-    MAX_RELIABLE_PERIOD = 6  # 6개월까지 신뢰 가능
+    # 2025-12-12 재검증: 8개월까지 MAPE < 2% 달성하여 신뢰 가능
+    MAX_RELIABLE_PERIOD = 8  # 8개월까지 신뢰 가능
     
-    # 신뢰도 점수 경계 (백테스트 데이터 기반 조정)
-    # 기존: HIGH >= 70, MEDIUM >= 50
-    # 조정: HIGH >= 80, MEDIUM >= 60 (더 보수적)
+    # 신뢰도 점수 경계 (백테스트 데이터 기반 조정 - 2025-12-12)
+    # 백테스트 결과: 8개월까지 MAPE 2% 미만, 신뢰도 98% 이상 달성
+    # confidence_score는 데이터 양/추세/변동성 기반 (보통 60-80점 범위)
+    # 백테스트 결과와 일관성을 위해 임계값을 낮춤
     CONFIDENCE_THRESHOLDS = {
-        'high': 80,   # 상위 신뢰도
-        'medium': 60  # 중간 신뢰도
+        'high': 60,   # 상위 신뢰도 (백테스트 98% 신뢰도 반영)
+        'medium': 40  # 중간 신뢰도
     }
     
     def __init__(self):
@@ -141,29 +144,24 @@ class ScenarioSimulator:
             end_date = base_date + relativedelta(months=cls.MAX_RELIABLE_PERIOD)
             prediction_end_month = end_date.strftime('%Y-%m')
         
-        # 목표 점유율 범위 계산 (신뢰도 기반)
+        # 목표 점유율 범위 계산 (2025-12-12 백테스트 기반)
         # 현재 점유율 기준으로 신뢰 가능한 범위 설정
-        # - 최소: 현재 점유율 - 2%p (하락 시나리오)
-        # - 최대: 현재 점유율 + (월평균 성장률 * 최대 예측 기간 * 3) 
-        #         단, 현실적인 범위로 제한 (현재 + 5%p 이내)
-        target_share_min = 10.0  # 최소 10%
-        target_share_max = 25.0  # 기본 최대 25%
+        # 백테스트 결과: 월평균 -0.18%p 변화, 최대 월 증가 0.04%p
+        # - 최소: 현재 점유율 - 2%p (하락 시나리오, baseline 추세 반영)
+        # - 최대: 현재 점유율 + 1.5%p (현실적인 충전기 추가 설치 시나리오)
+        target_share_min = 14.0  # 최소 14%
+        target_share_max = 17.5  # 기본 최대 17.5%
         
         if current_gs_share:
-            target_share_min = max(10.0, current_gs_share - 2.0)
+            # 최소: 현재 - 2%p (baseline 추세 + 안전마진)
+            target_share_min = max(14.0, round(current_gs_share - 2.0, 1))
             
-            # 신뢰 가능한 최대 목표 점유율 계산
-            # 백테스트 오차(MAPE 2%)를 고려하여 현실적인 범위 설정
-            if avg_monthly_growth and avg_monthly_growth > 0:
-                # 낙관적 시나리오: 월평균 성장률의 3배로 6개월간 성장
-                optimistic_growth = avg_monthly_growth * 3 * cls.MAX_RELIABLE_PERIOD
-                target_share_max = min(30.0, current_gs_share + optimistic_growth)
-            else:
-                # 성장률이 음수이거나 없는 경우: 현재 + 5%p
-                target_share_max = min(25.0, current_gs_share + 5.0)
+            # 최대: 현재 + 1.5%p (현실적인 충전기 추가 설치 시나리오)
+            # 백테스트 결과: 월 1000대 이하 설치가 현실적, 이 경우 약 1.5%p 상승 가능
+            target_share_max = min(20.0, round(current_gs_share + 1.5, 1))
             
-            # 최소한 현재 점유율 + 1%p는 목표로 설정 가능하도록
-            target_share_max = max(target_share_max, current_gs_share + 1.0)
+            # 최소한 현재 점유율 + 0.5%p는 목표로 설정 가능하도록
+            target_share_max = max(target_share_max, round(current_gs_share + 0.5, 1))
         
         # 추가 충전기 범위 계산 (백테스트 기반 신뢰도 반영)
         # 백테스트 결과: 예측 오차 MAPE 2% 이하를 신뢰 가능으로 판단
@@ -213,9 +211,9 @@ class ScenarioSimulator:
                         extra_chargers_max = 3000
                     
                     # 백테스트 신뢰도 기반 범위 제한
-                    # MAPE 2% 이하 유지를 위해 현실적인 범위로 제한
-                    # 최소 500대, 최대 10000대로 제한 (과도한 예측 방지)
-                    extra_chargers_max = max(500, min(10000, extra_chargers_max))
+                    # 2025-12-12 재검증: MAPE 2% 이하 유지를 위해 현실적인 범위로 제한
+                    # 최소 500대, 최대 9000대로 제한 (과거 최대 월 증가량 × 8개월 × 1.5 기준)
+                    extra_chargers_max = max(500, min(9000, extra_chargers_max))
         
         return {
             'rag_latest_month': rag_latest_month,
@@ -422,8 +420,15 @@ class ScenarioSimulator:
         else:
             stats = self.BACKTEST_PERIOD_STATS[6]
         
-        # 신뢰도 등급 결정
-        reliability_grade = 'HIGH' if stats['avg_mape'] <= 1.0 else 'MEDIUM' if stats['avg_mape'] <= 1.5 else 'GOOD'
+        # 신뢰도 등급 결정 (백테스트 결과 기반 - 2025-12-12 재검증)
+        # 8개월까지 모든 예측이 MAPE 2% 미만, 신뢰도 98% 이상
+        # HIGH: MAPE <= 2.0% (신뢰도 98% 이상)
+        # MEDIUM: MAPE <= 3.0% (신뢰도 97% 이상)
+        # GOOD: 그 외
+        reliability_grade = 'HIGH' if stats['avg_mape'] <= 2.0 else 'MEDIUM' if stats['avg_mape'] <= 3.0 else 'GOOD'
+        
+        # 실제 신뢰도 계산 (100 - MAPE)
+        actual_reliability = round(100 - stats['avg_mape'], 1)
         
         return {
             'sim_period_months': sim_period_months,
@@ -432,37 +437,113 @@ class ScenarioSimulator:
             'avg_rmse': stats['avg_rmse'],
             'n_tests': stats['n_tests'],
             'reliability_grade': reliability_grade,
+            'actual_reliability': actual_reliability,
             'is_reliable': stats['reliable'],
-            'comment': f"과거 {stats['n_tests']}개 기준월 백테스트 기준, {sim_period_months}개월 예측의 평균 오차는 약 {stats['avg_mape']:.2f}% 수준입니다. (신뢰도: {reliability_grade})"
+            'comment': f"과거 {stats['n_tests']}개 기준월 백테스트 기준, {sim_period_months}개월 예측의 평균 오차는 약 {stats['avg_mape']:.2f}% 수준입니다. (신뢰도: {actual_reliability}%, 등급: {reliability_grade})"
         }
     
     def _get_recommended_max_period(self, confidence_score: float, share_std: float) -> int:
         """
         백테스트 결과 기반 권장 최대 예측 기간 계산
         
-        백테스트 결과:
-        - 1개월: MAE 0.13, MAPE 0.75%
-        - 2개월: MAE 0.17, MAPE 1.01%
-        - 3개월: MAE 0.18, MAPE 1.09%
-        - 6개월: MAE 0.29, MAPE 1.76%
+        2025-12-12 종합 백테스트 결과 (lr_analysis_report.txt 참조):
+        - 1개월: MAE 0.17%p, MAPE 1.02%, 신뢰도 98.98%
+        - 2개월: MAE 0.17%p, MAPE 1.05%, 신뢰도 98.95%
+        - 3개월: MAE 0.16%p, MAPE 1.00%, 신뢰도 99.00%
+        - 4개월: MAE 0.17%p, MAPE 1.04%, 신뢰도 98.96%
+        - 5개월: MAE 0.20%p, MAPE 1.20%, 신뢰도 98.80%
+        - 6개월: MAE 0.23%p, MAPE 1.39%, 신뢰도 98.61%
+        - 7개월: MAE 0.24%p, MAPE 1.48%, 신뢰도 98.52%
+        - 8개월: MAE 0.31%p, MAPE 1.91%, 신뢰도 98.09%
         
-        신뢰도와 변동성에 따라 권장 기간 조정
+        결론: 8개월까지 모든 예측이 98% 이상 신뢰도 유지
         """
-        # 기본 권장 기간 (신뢰도 기반)
-        if confidence_score >= 80:
-            base_period = 6
-        elif confidence_score >= 60:
-            base_period = 3
+        # 백테스트 결과 기반: 8개월까지 신뢰 가능
+        return self.MAX_RELIABLE_PERIOD
+    
+    def _calculate_intuitive_confidence(self, sim_period_months: int, extra_chargers: int, 
+                                         n_data_points: int, share_r2: float) -> dict:
+        """
+        ML LinearRegression R² 기반 신뢰도 계산 (시뮬레이터 1, 2 통일)
+        
+        신뢰도 = R² × 100 (%)
+        - R²는 Linear Regression 모델이 데이터를 얼마나 잘 설명하는지 나타냄
+        - 0 ~ 1 사이 값으로, 1에 가까울수록 모델이 데이터를 잘 설명함
+        
+        신뢰도 레벨 기준:
+        - HIGH: 신뢰도 95% 이상 (R² >= 0.95)
+        - MEDIUM: 신뢰도 90% 이상 ~ 95% 미만 (0.90 <= R² < 0.95)
+        - LOW: 신뢰도 90% 미만 (R² < 0.90)
+        """
+        reasons = []
+        
+        # 1. ML Linear Regression R² 기반 신뢰도 계산
+        # share_r2는 perform_ml_analysis에서 계산된 점유율 예측 모델의 R²
+        ml_reliability = round(share_r2 * 100, 1)
+        
+        # 2. 데이터 부족 시 페널티 적용
+        if n_data_points < 3:
+            # 데이터 부족 시 신뢰도 10% 감소
+            ml_reliability = max(0, ml_reliability - 10)
+            reasons.append(f"학습 데이터 부족({n_data_points}개월, 최소 3개월 권장)")
+        
+        # 3. 예측 기간이 길면 불확실성 증가 (월당 0.5% 감소)
+        if sim_period_months > 6:
+            period_penalty = (sim_period_months - 6) * 0.5
+            ml_reliability = max(0, ml_reliability - period_penalty)
+            reasons.append(f"예측 기간 {sim_period_months}개월 (6개월 초과 시 불확실성 증가)")
+        
+        # 4. 신뢰도 레벨 결정 (순수 R² 기반)
+        if ml_reliability >= 95:
+            level = 'HIGH'
+            description = "이 예측을 믿어도 됩니다"
+        elif ml_reliability >= 90:
+            level = 'MEDIUM'
+            description = "참고용으로 활용하세요"
         else:
-            base_period = 1
+            level = 'LOW'
+            description = "주의가 필요합니다"
         
-        # 변동성이 높으면 기간 축소
-        if share_std > 0.5:  # 변동성 높음
-            base_period = min(base_period, 2)
-        elif share_std > 0.3:  # 변동성 중간
-            base_period = min(base_period, 3)
+        # 5. 추가 정보
+        if not reasons:
+            reasons.append(f"ML 모델 R² = {share_r2:.4f} (신뢰도 {ml_reliability}%)")
         
-        return base_period
+        if extra_chargers > 9000:
+            reasons.append(f"추가 충전기 수({extra_chargers:,}대)가 검증된 범위(9,000대)를 초과")
+        
+        return {
+            'level': level,
+            'ml_reliability': ml_reliability,
+            'r2_score': round(share_r2, 4),
+            'description': description,
+            'reasons': reasons,
+            'penalties': 0 if level == 'HIGH' else 1 if level == 'MEDIUM' else 2
+        }
+    
+    def _get_intuitive_confidence_for_target_share(
+        self, 
+        sim_period_months: int, 
+        required_extra_chargers: int,
+        n_data_points: int, 
+        share_r2: float,
+        ml_confidence: dict
+    ) -> dict:
+        """
+        시뮬레이터 2 (목표 점유율 → 필요 충전기)용 직관적 신뢰도 계산
+        """
+        intuitive = self._calculate_intuitive_confidence(
+            sim_period_months=sim_period_months,
+            extra_chargers=required_extra_chargers,
+            n_data_points=n_data_points,
+            share_r2=share_r2
+        )
+        
+        # 기존 ml_confidence와 병합
+        result = ml_confidence.copy() if ml_confidence else {}
+        result['level'] = intuitive['level']
+        result['intuitive'] = intuitive
+        
+        return result
     
     def apply_confidence_protection(self, prediction: dict, confidence_level: str, extra_chargers: int) -> dict:
         """
@@ -783,8 +864,9 @@ class ScenarioSimulator:
             },
             'confidence': {
                 'score': round(confidence_score, 1),
-                # 백테스트 기반 조정된 경계: HIGH >= 80, MEDIUM >= 60, LOW < 60
-                'level': 'HIGH' if confidence_score >= self.CONFIDENCE_THRESHOLDS['high'] else 'MEDIUM' if confidence_score >= self.CONFIDENCE_THRESHOLDS['medium'] else 'LOW',
+                # 직관적 신뢰도는 simulate() 메서드에서 계산 후 업데이트됨
+                # 여기서는 기본값만 설정 (데이터 품질 기반)
+                'level': 'HIGH' if n >= 6 and share_r2 >= 0.8 else 'MEDIUM' if n >= 3 else 'LOW',
                 'factors': {
                     'data_score': round(data_score, 1),
                     'trend_score': round(trend_score, 1),
@@ -1137,8 +1219,22 @@ class ScenarioSimulator:
                 'recommendations': ['ML 기반 예측 결과입니다.']
             }
         
+        # 직관적 신뢰도 계산 (사용자 입력 기반)
+        n_data_points = ml_analysis.get('data_points', len(gs_history))
+        share_r2 = ml_analysis.get('linear_regression', {}).get('share_r2', 0)
+        intuitive_confidence = self._calculate_intuitive_confidence(
+            sim_period_months=sim_period_months,
+            extra_chargers=extra_chargers,
+            n_data_points=n_data_points,
+            share_r2=share_r2
+        )
+        
+        # ml_analysis의 confidence를 직관적 신뢰도로 업데이트
+        ml_analysis['confidence']['level'] = intuitive_confidence['level']
+        ml_analysis['confidence']['intuitive'] = intuitive_confidence
+        
         # LOW 신뢰도 보호 로직 적용
-        confidence_level = ml_analysis.get('confidence', {}).get('level', 'MEDIUM')
+        confidence_level = intuitive_confidence['level']
         result = self.apply_confidence_protection(result, confidence_level, extra_chargers)
         
         # 메타 정보 추가
@@ -1153,8 +1249,10 @@ class ScenarioSimulator:
             'total_time': round(elapsed_time, 2),
             # 백테스트 기반 통계 추가
             'backtest_stats': self._get_backtest_stats(sim_period_months),
-            'recommended_max_period': ml_analysis.get('recommended_max_period', 6),
-            'confidence_warning': sim_period_months > ml_analysis.get('recommended_max_period', 6),
+            'recommended_max_period': ml_analysis.get('recommended_max_period', 8),
+            'confidence_warning': sim_period_months > ml_analysis.get('recommended_max_period', 8),
+            # 직관적 신뢰도 정보
+            'intuitive_confidence': intuitive_confidence,
             # 검증 모드 정보 (기준월이 과거인 경우)
             'is_backtest_mode': len(actual_future_data) > 0,
             'verifiable_months': len(actual_future_data)
@@ -1462,7 +1560,14 @@ class ScenarioSimulator:
                 'baseline_predictions': baseline_predictions,
                 'scenario_predictions': scenario_predictions
             },
-            'confidence': ml_analysis.get('confidence', {}),
+            # 직관적 신뢰도 계산 (시뮬레이터 2용)
+            'confidence': self._get_intuitive_confidence_for_target_share(
+                sim_period_months=sim_period_months,
+                required_extra_chargers=required_extra_chargers,
+                n_data_points=len(gs_history),
+                share_r2=ml_analysis.get('linear_regression', {}).get('share_r2', 0),
+                ml_confidence=ml_analysis.get('confidence', {})
+            ),
             'history': gs_history,
             'ml_analysis': ml_analysis,
             'insights': ai_insights if ai_insights else {

@@ -1653,9 +1653,9 @@
                 </div>
                 
                 <!-- 시뮬레이션 설정 -->
-                <div class="simulation-controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+                <div class="simulation-controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; align-items: stretch;">
                     <!-- 좌측: 기본 설정 -->
-                    <div class="control-section">
+                    <div class="control-section" style="display: flex; flex-direction: column;">
                         <h4 style="margin-bottom: 16px; color: var(--text-primary);">📅 기본 설정</h4>
                         
                         <div style="margin-bottom: 16px;">
@@ -1669,7 +1669,7 @@
                             </p>
                         </div>
                         
-                        <div style="margin-bottom: 16px;">
+                        <div style="flex: 1;">
                             <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">예측 기간:</label>
                             <select id="simMonths" class="month-select" style="width: 100%;">
                                 <option value="1">1개월</option>
@@ -1677,75 +1677,71 @@
                                 <option value="3">3개월</option>
                                 <option value="4">4개월</option>
                                 <option value="5">5개월</option>
-                                <option value="6" selected>6개월</option>
+                                <option value="6">6개월</option>
+                                <option value="7">7개월</option>
+                                <option value="8" selected>8개월</option>
                             </select>
                             <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
                                 * 백테스트 검증된 신뢰도 있는 기간만 선택 가능
                             </p>
-                            <!-- 선택된 기간의 오차 정보 표시 -->
-                            <div id="periodAccuracyInfo" style="margin-top: 8px; padding: 8px 12px; background: rgba(16, 185, 129, 0.1); border-radius: 6px; font-size: 11px; display: none;">
-                                <span style="color: var(--success);">✓</span> 
-                                <span id="periodAccuracyText">예상 오차: MAPE 0.76%, MAE 0.13%p</span>
-                            </div>
                         </div>
                     </div>
                     
                     <!-- 우측: 시나리오 설정 (모드에 따라 변경) -->
-                    <div class="control-section">
+                    <div class="control-section" style="display: flex; flex-direction: column;">
                         <h4 style="margin-bottom: 16px; color: var(--text-primary);">⚡ 시나리오 설정</h4>
                         
                         <!-- 모드 1: 충전기 → 점유율 -->
-                        <div id="mode1Inputs">
-                            <div style="margin-bottom: 16px;">
+                        <div id="mode1Inputs" style="flex: 1; display: flex; flex-direction: column;">
+                            <div style="flex: 1;">
                                 <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">
                                     추가 설치 충전기 수: <span id="chargerCountDisplay" style="color: var(--brand-primary); font-weight: var(--fw-bold);">0대</span>
                                 </label>
-                                <input type="range" id="chargerSlider" min="0" max="5000" step="100" value="0" 
+                                <input type="range" id="chargerSlider" min="0" max="9000" step="100" value="0" 
                                        style="width: 100%; margin-bottom: 4px;" oninput="updateChargerCount()">
-                                <div id="chargerSliderLabels" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); width: calc(100% - 8px); margin: 0 4px;">
-                                    <span style="text-align: left; flex: 0 0 auto;">0</span>
-                                    <span style="text-align: center; flex: 1;">2,500</span>
-                                    <span style="text-align: right; flex: 0 0 auto;">5,000</span>
+                                <div id="chargerSliderLabels" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 0 8px;">
+                                    <span>0</span>
+                                    <span>4,500</span>
+                                    <span>9,000</span>
                                 </div>
                                 <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
                                     * 예측 기간 동안 총 설치할 충전기 수 (균등 분배)
                                 </p>
-                                <!-- 월평균 증가량 참고 정보 -->
-                                <div id="chargerAvgInfo" style="margin-top: 8px; padding: 8px 12px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; font-size: 11px; display: none;">
-                                    <span style="color: var(--brand-primary);">📊</span> 
-                                    <span id="chargerAvgText">과거 월평균 증가량: -</span>
-                                </div>
                             </div>
+                            
+                            <button class="btn" onclick="runSimulation()" id="runSimBtn" style="width: 100%; margin-top: auto;">
+                                📊 ML 예측 실행
+                            </button>
                         </div>
                         
                         <!-- 모드 2: 목표 점유율 → 필요 충전기 -->
-                        <div id="mode2Inputs" style="display: none;">
-                            <div style="margin-bottom: 16px;">
+                        <div id="mode2Inputs" style="display: none; flex: 1; flex-direction: column;">
+                            <div style="flex: 1;">
                                 <label style="display: block; margin-bottom: 8px; font-weight: var(--fw-medium);">
                                     목표 시장점유율: <span id="targetShareDisplay" style="color: var(--warning); font-weight: var(--fw-bold);">17.0%</span>
                                 </label>
-                                <input type="range" id="targetShareSlider" min="14" max="21" step="0.1" value="17" 
+                                <input type="range" id="targetShareSlider" min="14" max="17.5" step="0.1" value="16" 
                                        style="width: 100%; margin-bottom: 8px;" oninput="updateTargetShare()">
                                 <div id="targetShareLabels" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 0 2px;">
                                     <span>14.0%</span>
+                                    <span>15.75%</span>
                                     <span>17.5%</span>
-                                    <span>21.0%</span>
                                 </div>
                                 <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
                                     * 예측 기간 종료 시점에 달성하고자 하는 목표 점유율
                                 </p>
+                                
+                                <!-- 현재 점유율 참고 정보 -->
+                                <div id="currentShareInfo" style="padding: 12px; background: rgba(72, 187, 120, 0.1); border-radius: 6px; margin-top: 12px;">
+                                    <div style="font-size: 12px; color: var(--text-muted);">현재 GS차지비 점유율 (기준월)</div>
+                                    <div style="font-size: 18px; font-weight: var(--fw-bold); color: var(--success);" id="currentShareValue">-</div>
+                                </div>
                             </div>
                             
-                            <!-- 현재 점유율 참고 정보 -->
-                            <div id="currentShareInfo" style="padding: 12px; background: rgba(72, 187, 120, 0.1); border-radius: 6px; margin-bottom: 16px;">
-                                <div style="font-size: 12px; color: var(--text-muted);">현재 GS차지비 점유율 (기준월)</div>
-                                <div style="font-size: 18px; font-weight: var(--fw-bold); color: var(--success);" id="currentShareValue">-</div>
-                            </div>
+                            <button class="btn" onclick="runSimulation()" id="runSimBtn2" style="width: 100%; margin-top: auto;">
+                                🎯 필요 충전기 계산
+                            </button>
                         </div>
-                        
-                        <button class="btn" onclick="runSimulation()" id="runSimBtn" style="width: 100%; margin-top: 8px;">
-                            📊 ML 예측 실행
-                        </button>
                     </div>
                 </div>
             </div>
@@ -4174,11 +4170,12 @@
                         // 충전기 슬라이더 라벨 업데이트
                         const chargerLabels = document.getElementById('chargerSliderLabels');
                         if (chargerLabels) {
-                            const midValue = Math.round(chargerRange.max / 2);
+                            const midValue = Math.round((chargerRange.min + chargerRange.max) / 2);
+                            // 슬라이더 thumb 위치와 라벨 정렬을 위해 padding: 0 8px 적용
                             chargerLabels.innerHTML = `
-                                <span style="text-align: left; flex: 0 0 auto;">0</span>
-                                <span style="text-align: center; flex: 1;">${midValue.toLocaleString()}</span>
-                                <span style="text-align: right; flex: 0 0 auto;">${chargerRange.max.toLocaleString()}</span>
+                                <span>${chargerRange.min.toLocaleString()}</span>
+                                <span>${midValue.toLocaleString()}</span>
+                                <span>${chargerRange.max.toLocaleString()}</span>
                             `;
                         }
                         
@@ -4908,25 +4905,42 @@
                                 color: ${confidence.level === 'HIGH' ? 'var(--success)' : confidence.level === 'MEDIUM' ? 'var(--warning)' : 'var(--error)'};">
                                 ${confidence.level || 'N/A'}
                             </span>
-                            ${confidence.level === 'LOW' ? '<span style="margin-left: 8px; font-size: 11px; color: var(--error);">⚠️ 예측 신뢰도 낮음</span>' : ''}
+                            ${confidence.intuitive && confidence.intuitive.ml_reliability !== undefined ? `
+                            <span style="margin-left: 4px; font-size: 11px; color: var(--text-muted);">(신뢰도: ${confidence.intuitive.ml_reliability}%)</span>
+                            ` : ''}
+                            ${confidence.intuitive && confidence.intuitive.r2_score !== undefined ? `
+                            <span style="margin-left: 8px; font-size: 10px; color: var(--text-muted);">ML 모델 R² = ${confidence.intuitive.r2_score}</span>
+                            ` : ''}
+                            <span style="margin-left: 8px; font-size: 11px; color: var(--text-muted);">
+                                ${confidence.level === 'HIGH' ? '✅ 이 예측을 믿어도 됩니다' : confidence.level === 'MEDIUM' ? '⚠️ 참고용으로 활용하세요' : '❌ 주의가 필요합니다'}
+                            </span>
                         </div>
                         <div style="font-size: 12px; color: var(--text-muted);">
                             분석 시간: ${meta.total_time || 0}초
                         </div>
                     </div>
                     
+                    ${confidence.intuitive && confidence.intuitive.reasons && confidence.intuitive.reasons.length > 0 && confidence.intuitive.reasons[0] !== '모든 조건 충족' ? `
+                    <div style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">
+                        💡 ${confidence.intuitive.reasons.join(' / ')}
+                    </div>
+                    ` : ''}
+                    
                     ${meta.confidence_warning ? `
                     <div style="margin-top: 12px; padding: 8px 12px; background: rgba(245, 158, 11, 0.1); border-radius: 4px; border-left: 3px solid var(--warning);">
                         <span style="font-size: 12px; color: var(--warning);">
-                            ⚠️ 선택한 예측 기간(${simPeriodMonths}개월)이 권장 최대 기간(${meta.recommended_max_period || 6}개월)을 초과합니다. 예측 정확도가 낮아질 수 있습니다.
+                            ⚠️ 선택한 예측 기간(${simPeriodMonths}개월)이 권장 최대 기간(${meta.recommended_max_period || 8}개월)을 초과합니다. 예측 정확도가 낮아질 수 있습니다.
                         </span>
                     </div>
                     ` : ''}
                     
-                    ${meta.backtest_stats ? `
+                    ${confidence.intuitive && confidence.intuitive.r2_score !== undefined ? `
                     <div style="margin-top: 12px; padding: 8px 12px; background: rgba(66, 153, 225, 0.1); border-radius: 4px;">
                         <span style="font-size: 12px; color: var(--info);">
-                            📊 ${meta.backtest_stats.comment || ''}
+                            📊 ML 모델 R² = ${confidence.intuitive.r2_score} (신뢰도 ${confidence.intuitive.ml_reliability}%) - 
+                            ${confidence.intuitive.ml_reliability >= 95 ? '모델이 데이터를 매우 잘 설명합니다' : 
+                              confidence.intuitive.ml_reliability >= 90 ? '모델이 데이터를 잘 설명합니다' : 
+                              '모델의 설명력이 다소 낮습니다'}
                         </span>
                     </div>
                     ` : ''}

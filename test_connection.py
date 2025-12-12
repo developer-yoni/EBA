@@ -128,7 +128,7 @@ def test_knowledge_base():
             retrievalQuery={'text': '충전 인프라'},
             retrievalConfiguration={
                 'vectorSearchConfiguration': {
-                    'numberOfResults': 2
+                    'numberOfResults': Config.KB_NUMBER_OF_RESULTS  # RAG 모든 데이터 활용
                 }
             }
         )

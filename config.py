@@ -23,7 +23,7 @@ class Config:
     
     # Knowledge Base 설정
     KNOWLEDGE_BASE_ID = os.getenv('KNOWLEDGE_BASE_ID', 'XHG5MMFIYK')
-    KB_NUMBER_OF_RESULTS = 2  # 성능 최적화: 3 → 2
+    KB_NUMBER_OF_RESULTS = 100  # RAG 모든 데이터 활용 (AWS 최대값: 100)
     
     # 데이터 설정
     HEADER_ROW = 4  # 0-based index (4번째 행이 헤더)

@@ -182,7 +182,7 @@ MODEL_ID=global.anthropic.claude-sonnet-4-5-20250929-v1:0
 ```python
 MAX_TOKENS = 5120
 TEMPERATURE = 0.7
-KB_NUMBER_OF_RESULTS = 2
+KB_NUMBER_OF_RESULTS = 100  # RAG 모든 데이터 활용 (AWS 최대값)
 HEADER_ROW = 4  # 엑셀 헤더 위치
 ```
 
