@@ -813,6 +813,27 @@
         .sim-mode-tab:last-child {
             border-radius: 0 8px 0 0;
         }
+
+        /* range(슬라이더) 라벨: 가운데 정렬 보장
+           - 기존 space-between 방식은 좌/우 텍스트 폭 차이로 중앙 라벨이 실제 50%에서 밀릴 수 있음
+           - (예) 4,500 위치로 맞췄는데 값이 4,300으로 보이는 현상
+        */
+        .range-labels {
+            position: relative;
+            height: 16px;
+            line-height: 16px;
+            font-size: 12px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            user-select: none;
+        }
+        .range-labels > span {
+            position: absolute;
+            top: 0;
+        }
+        .range-labels > span.min { left: 0; }
+        .range-labels > span.mid { left: 50%; transform: translateX(-50%); }
+        .range-labels > span.max { right: 0; }
         
         /* ========================================
            GS INSIGHT STUDIO - Custom Scrollbar
@@ -1699,10 +1720,10 @@
                                 </label>
                                 <input type="range" id="chargerSlider" min="0" max="9000" step="100" value="0" 
                                        style="width: 100%; margin-bottom: 4px;" oninput="updateChargerCount()">
-                                <div id="chargerSliderLabels" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 0 8px;">
-                                    <span>0</span>
-                                    <span>4,500</span>
-                                    <span>9,000</span>
+                                <div id="chargerSliderLabels" class="range-labels" style="padding: 0 8px;">
+                                    <span class="min">0</span>
+                                    <span class="mid">4,500</span>
+                                    <span class="max">9,000</span>
                                 </div>
                                 <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
                                     * 예측 기간 동안 총 설치할 충전기 수 (균등 분배)
@@ -1722,10 +1743,10 @@
                                 </label>
                                 <input type="range" id="targetShareSlider" min="14" max="17.5" step="0.1" value="16" 
                                        style="width: 100%; margin-bottom: 8px;" oninput="updateTargetShare()">
-                                <div id="targetShareLabels" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 0 2px;">
-                                    <span>14.0%</span>
-                                    <span>15.75%</span>
-                                    <span>17.5%</span>
+                                <div id="targetShareLabels" class="range-labels" style="padding: 0 2px;">
+                                    <span class="min">14.0%</span>
+                                    <span class="mid">15.75%</span>
+                                    <span class="max">17.5%</span>
                                 </div>
                                 <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
                                     * 예측 기간 종료 시점에 달성하고자 하는 목표 점유율
@@ -4173,9 +4194,9 @@
                             const midValue = Math.round((chargerRange.min + chargerRange.max) / 2);
                             // 슬라이더 thumb 위치와 라벨 정렬을 위해 padding: 0 8px 적용
                             chargerLabels.innerHTML = `
-                                <span>${chargerRange.min.toLocaleString()}</span>
-                                <span>${midValue.toLocaleString()}</span>
-                                <span>${chargerRange.max.toLocaleString()}</span>
+                                <span class="min">${chargerRange.min.toLocaleString()}</span>
+                                <span class="mid">${midValue.toLocaleString()}</span>
+                                <span class="max">${chargerRange.max.toLocaleString()}</span>
                             `;
                         }
                         
@@ -4204,9 +4225,9 @@
                         if (targetLabels) {
                             const midValue = ((targetRange.min + targetRange.max) / 2).toFixed(1);
                             targetLabels.innerHTML = `
-                                <span>${targetRange.min.toFixed(1)}%</span>
-                                <span>${midValue}%</span>
-                                <span>${targetRange.max.toFixed(1)}%</span>
+                                <span class="min">${targetRange.min.toFixed(1)}%</span>
+                                <span class="mid">${midValue}%</span>
+                                <span class="max">${targetRange.max.toFixed(1)}%</span>
                             `;
                         }
                         
