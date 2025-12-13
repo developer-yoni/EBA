@@ -41,8 +41,7 @@ curl -X POST http://localhost:5001/api/send-to-slack \
 
 ### 슬랙 Webhook URL
 ```
-환경 변수 SLACK_WEBHOOK_URL에서 설정
-(.env 파일 또는 시스템 환경 변수 사용)
+https://hooks.slack.com/services/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
 ```
 
 ### MCP 서버 설정
@@ -60,7 +59,7 @@ curl -X POST http://localhost:5001/api/send-to-slack \
         "run",
         "slack",
         "--key",
-        "YOUR_MCP_SLACK_KEY_HERE"
+        "96176b24-6bd4-4ba7-a112-53fb4d26c576"
       ]
     }
   }

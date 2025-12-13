@@ -4,14 +4,10 @@
 from flask import Flask, render_template, jsonify, request
 import json
 import pandas as pd
-from dotenv import load_dotenv
 from data_loader import ChargingDataLoader
 from data_analyzer import ChargingDataAnalyzer
 from ai_report_generator import AIReportGenerator
 from query_analyzer import QueryAnalyzer
-
-# 환경 변수 로드
-load_dotenv()
 
 app = Flask(__name__)
 
@@ -1892,15 +1888,8 @@ def slack_send_simple():
         
         print(f"📤 슬랙 전송: {len(message)} 자")
         
-        # 슬랙 Webhook URL (환경 변수에서 가져오기)
-        import os
-        slack_webhook_url = os.getenv('SLACK_WEBHOOK_URL')
-        
-        if not slack_webhook_url:
-            return jsonify({
-                'success': False,
-                'error': 'SLACK_WEBHOOK_URL 환경 변수가 설정되지 않았습니다'
-            }), 500
+        # 슬랙 Webhook URL
+        slack_webhook_url = "https://hooks.slack.com/services/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"
         
         # 슬랙으로 전송
         import requests

@@ -5,17 +5,8 @@
 import requests
 import json
 
-# 슬랙 Webhook URL (환경 변수에서 가져오기)
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL')
-
-if not SLACK_WEBHOOK_URL:
-    print("❌ SLACK_WEBHOOK_URL 환경 변수가 설정되지 않았습니다")
-    print("💡 .env 파일을 생성하고 SLACK_WEBHOOK_URL을 설정해주세요")
-    exit(1)
+# 슬랙 Webhook URL
+SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 
 def test_slack_message():
     """슬랙 메시지 전송 테스트"""
