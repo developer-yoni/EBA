@@ -1674,6 +1674,11 @@
                 <button class="btn" onclick="showDashboard()" id="dashboardBtn" disabled style="margin-top: 10px;">
                     📊 대시보드 생성
                 </button>
+                
+                <!-- 슬랙 전송 버튼 -->
+                <button class="btn btn-secondary" onclick="sendToSlack()" id="slackBtn" disabled style="margin-top: 10px; margin-left: 10px;">
+                    📤 슬랙으로 전송
+                </button>
             </div>
             
             <div id="dashboardContainer" class="hidden" style="margin-top: 30px;">
@@ -2510,6 +2515,13 @@
             if (container) {
                 container.classList.remove('hidden');
                 console.log('✅ 대시보드 컨테이너 표시');
+                
+                // 슬랙 버튼 활성화
+                const slackBtn = document.getElementById('slackBtn');
+                if (slackBtn) {
+                    slackBtn.disabled = false;
+                    console.log('✅ 슬랙 버튼 활성화');
+                }
             } else {
                 console.error('❌ dashboardContainer를 찾을 수 없습니다');
                 return;
@@ -5557,6 +5569,191 @@
                 initializeModalSystem();
             }, 2000);
         });
+        
+        // 슬랙 전송 함수
+        async function sendToSlack() {
+            const startMonth = document.getElementById('dashboardStartMonth').value;
+            const endMonth = document.getElementById('dashboardEndMonth').value;
+            
+            if (!startMonth || !endMonth) {
+                alert('시작월과 종료월을 모두 선택해주세요');
+                return;
+            }
+            
+            // 대시보드가 생성되었는지 확인
+            const dashboardContainer = document.getElementById('dashboardContainer');
+            if (!dashboardContainer || dashboardContainer.classList.contains('hidden')) {
+                alert('먼저 대시보드를 생성해주세요');
+                return;
+            }
+            
+            const slackBtn = document.getElementById('slackBtn');
+            const originalText = slackBtn.innerHTML;
+            
+            try {
+                // 버튼 상태 변경
+                slackBtn.disabled = true;
+                slackBtn.innerHTML = '📤 전송 중...';
+                
+                console.log('📤 슬랙 전송 시작:', startMonth, '~', endMonth);
+                
+                // 현재 대시보드 데이터에서 슬랙 메시지 생성
+                const message = generateSlackMessage(startMonth, endMonth);
+                
+                if (!message) {
+                    alert('❌ 대시보드 데이터를 찾을 수 없습니다');
+                    return;
+                }
+                
+                // 같은 서버의 슬랙 API 사용 (CORS 문제 해결)
+                const response = await fetch('/api/slack-send', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        message: message
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('✅ 슬랙 전송이 완료되었습니다!');
+                    console.log('✅ 슬랙 전송 성공:', data);
+                } else {
+                    alert('❌ 슬랙 전송 실패: ' + data.error);
+                    console.error('❌ 슬랙 전송 실패:', data.error);
+                }
+                
+            } catch (error) {
+                console.error('슬랙 전송 오류:', error);
+                alert('❌ 슬랙 전송 중 오류가 발생했습니다: ' + error.message);
+            } finally {
+                // 버튼 상태 복원
+                slackBtn.disabled = false;
+                slackBtn.innerHTML = originalText;
+            }
+        }
+        
+        // 슬랙 메시지 생성 함수
+        function generateSlackMessage(startMonth, endMonth) {
+            try {
+                // 현재 표시된 대시보드에서 데이터 추출
+                const gsKpiTable = document.getElementById('gsKpiTable');
+                const dashboardSummary = document.getElementById('dashboardSummary');
+                
+                if (!gsKpiTable || !dashboardSummary) {
+                    console.error('대시보드 데이터를 찾을 수 없습니다');
+                    return null;
+                }
+                
+                // 기간 표시
+                const periodText = startMonth === endMonth ? endMonth : `${startMonth} ~ ${endMonth}`;
+                
+                // 현재 시간
+                const now = new Date();
+                const timeStr = now.toLocaleString('ko-KR', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                // 기본 메시지 구조
+                let message = `📊 *EV 충전 인프라 분석 리포트*
+━━━━━━━━━━━━━━━━━━━━━━
+📅 분석 기간: *${periodText}* (전월 대비 현황)
+
+🔋 *GS차지비 현황*
+`;
+                
+                // GS차지비 데이터 추출 (테이블에서)
+                const gsRows = gsKpiTable.querySelectorAll('tbody tr');
+                if (gsRows.length > 0) {
+                    // 첫 번째 행에서 현재 값 추출
+                    const currentRow = gsRows[0];
+                    const cells = currentRow.querySelectorAll('td');
+                    
+                    if (cells.length >= 6) {
+                        const marketShare = cells[1].textContent.trim();
+                        const stations = cells[2].textContent.trim();
+                        const slowChargers = cells[3].textContent.trim();
+                        const fastChargers = cells[4].textContent.trim();
+                        const totalChargers = cells[5].textContent.trim();
+                        
+                        message += `• 시장점유율: *${marketShare}*`;
+                        message += `\n• 충전소: *${stations}개*`;
+                        message += `\n• 총충전기: *${totalChargers}기*`;
+                        message += `\n• 완속충전기: *${slowChargers}기*`;
+                        message += `\n• 급속충전기: *${fastChargers}기*`;
+                        
+                        // 증감량 정보 (두 번째 행이 있으면)
+                        if (gsRows.length > 1) {
+                            const changeRow = gsRows[1];
+                            const changeCells = changeRow.querySelectorAll('td');
+                            if (changeCells.length >= 6) {
+                                const shareChange = changeCells[1].textContent.trim();
+                                const stationChange = changeCells[2].textContent.trim();
+                                const totalChange = changeCells[5].textContent.trim();
+                                
+                                message = message.replace(`• 시장점유율: *${marketShare}*`, `• 시장점유율: *${marketShare}* ${shareChange}`);
+                                message = message.replace(`• 충전소: *${stations}개*`, `• 충전소: *${stations}개* ${stationChange}`);
+                                message = message.replace(`• 총충전기: *${totalChargers}기*`, `• 총충전기: *${totalChargers}기* ${totalChange}`);
+                            }
+                        }
+                    }
+                }
+                
+                message += `\n\n📈 *전체 시장 현황*`;
+                
+                // 전체 시장 데이터 추출 (요약 테이블에서)
+                const summaryTable = dashboardSummary.querySelector('table');
+                if (summaryTable) {
+                    const summaryRows = summaryTable.querySelectorAll('tbody tr');
+                    if (summaryRows.length > 0) {
+                        const totalRow = summaryRows[0];
+                        const totalCells = totalRow.querySelectorAll('td');
+                        
+                        if (totalCells.length >= 6) {
+                            const totalStations = totalCells[2].textContent.trim();
+                            const totalSlowChargers = totalCells[3].textContent.trim();
+                            const totalFastChargers = totalCells[4].textContent.trim();
+                            const totalAllChargers = totalCells[5].textContent.trim();
+                            
+                            message += `\n• 총 충전소: ${totalStations}개`;
+                            message += `\n• 총 충전기: *${totalAllChargers}기*`;
+                            message += `\n• 완속충전기: *${totalSlowChargers}기*`;
+                            message += `\n• 급속충전기: *${totalFastChargers}기*`;
+                            
+                            // 증감량 정보 추가
+                            if (summaryRows.length > 1) {
+                                const changeRow = summaryRows[summaryRows.length - 1]; // 마지막 행 (증감량)
+                                const changeCells = changeRow.querySelectorAll('td');
+                                if (changeCells.length >= 6) {
+                                    const totalChange = changeCells[5].textContent.trim();
+                                    const slowChange = changeCells[3].textContent.trim();
+                                    const fastChange = changeCells[4].textContent.trim();
+                                    
+                                    message = message.replace(`• 총 충전기: *${totalAllChargers}기*`, `• 총 충전기: *${totalAllChargers}기* ${totalChange}`);
+                                    message = message.replace(`• 완속충전기: *${totalSlowChargers}기*`, `• 완속충전기: *${totalSlowChargers}기* ${slowChange}`);
+                                    message = message.replace(`• 급속충전기: *${totalFastChargers}기*`, `• 급속충전기: *${totalFastChargers}기* ${fastChange}`);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                message += `\n\n━━━━━━━━━━━━━━━━━━━━━━`;
+                message += `\n🕐 생성: ${timeStr}`;
+                
+                console.log('📝 생성된 슬랙 메시지:', message);
+                return message;
+                
+            } catch (error) {
+                console.error('슬랙 메시지 생성 오류:', error);
+                return null;
+            }
+        }
     </script>
     
     <!-- Modal HTML Structure -->
