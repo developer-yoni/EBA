@@ -1,0 +1,19 @@
+[33mcommit 22b847812824796d7f39b58af91df5849c7daddb[m
+Author: simga <simga@example.com>
+Date:   Sat Dec 13 13:55:56 2025 +0900
+
+    feat.대시보드슬랙전송추가
+
+FEATURE_SUMMARY.md
+README.md
+SLACK_INTEGRATION_GUIDE.md
+app.py
+requirements.txt
+send_slack_report.py
+simple_slack_test.py
+slack_proxy.py
+templates/index.html
+test_api_endpoint.py
+test_new_slack_api.py
+test_slack_integration.py
+test_slack_proxy.py
