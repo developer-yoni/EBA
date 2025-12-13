@@ -5045,9 +5045,6 @@
                 return null;
             });
             
-            // 목표선 (수평선)
-            const targetLineDataset = allMonths.map(() => targetShare);
-            
             const baseMonthIdx = allMonths.indexOf(baseMonth);
             
             simulationChart2 = new Chart(ctx, {
@@ -5065,17 +5062,6 @@
                             pointRadius: 4,
                             tension: 0.1,
                             order: 4
-                        },
-                        {
-                            label: `목표 점유율 (${targetShare.toFixed(1)}%)`,
-                            data: targetLineDataset,
-                            borderColor: '#f59e0b',
-                            borderWidth: 2,
-                            borderDash: [10, 5],
-                            fill: false,
-                            pointRadius: 0,
-                            tension: 0,
-                            order: 0
                         },
                         {
                             label: '목표 달성 시나리오',
