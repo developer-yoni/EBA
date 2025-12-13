@@ -26,6 +26,12 @@ AWS Bedrock + Knowledge Base를 활용한 충전 인프라 현황 자동 분석 
 - Knowledge Base 기반 커스텀 질의
 - 실시간 데이터 기반 답변 생성
 
+### 5. 📤 슬랙 연동
+- 대시보드 자동 전송 기능
+- GS차지비 KPI + 전체 시장 현황 요약
+- 전월 대비 증감량 자동 계산
+- 실시간 슬랙 채널 알림
+
 ## 🏗️ 시스템 아키텍처
 
 ```
@@ -114,7 +120,26 @@ aws configure
 python app.py
 ```
 
-브라우저에서 `http://localhost:5000` 접속
+브라우저에서 `http://localhost:5001/dashboard` 접속
+
+### 📤 슬랙 연동 사용법
+
+1. **대시보드 생성**
+   - 웹 대시보드에서 원하는 기간 선택
+   - "📊 대시보드 생성" 버튼 클릭
+
+2. **슬랙 전송**
+   - 대시보드 생성 후 "📤 슬랙으로 전송" 버튼 클릭
+   - 자동으로 슬랙 채널에 리포트 전송
+
+3. **API 직접 호출**
+   ```bash
+   curl -X POST http://localhost:5001/api/send-to-slack \
+     -H "Content-Type: application/json" \
+     -d '{"startMonth": "2025-10", "endMonth": "2025-11"}'
+   ```
+
+자세한 내용은 [슬랙 연동 가이드](SLACK_INTEGRATION_GUIDE.md)를 참조하세요.
 
 ### CLI 실행 (웹 서버 없이)
 

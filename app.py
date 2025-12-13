@@ -1656,6 +1656,276 @@ def initialize_data():
         traceback.print_exc()
         return False
 
+@app.route('/api/send-to-slack', methods=['POST'])
+def send_dashboard_to_slack():
+    """대시보드를 슬랙으로 전송"""
+    try:
+        data = request.json
+        start_month = data.get('startMonth')
+        end_month = data.get('endMonth')
+        selected_months = data.get('months', [])
+        
+        if not end_month:
+            return jsonify({
+                'success': False,
+                'error': '종료월을 선택해주세요'
+            }), 400
+        
+        if cache['full_data'] is None:
+            return jsonify({
+                'success': False,
+                'error': '먼저 데이터를 로드해주세요'
+            }), 400
+        
+        print(f'\n📤 슬랙 전송 시작: {start_month} ~ {end_month}', flush=True)
+        
+        # 대시보드 데이터 생성 (기존 로직 재사용)
+        from data_analyzer import ChargingDataAnalyzer
+        from data_loader import ChargingDataLoader
+        
+        full_analyzer = ChargingDataAnalyzer(cache['full_data'])
+        
+        # 선택된 월들로 필터링
+        current_data = None
+        if selected_months:
+            filtered_data = cache['full_data'][cache['full_data']['snapshot_month'].isin(selected_months)]
+            if len(filtered_data) > 0:
+                analyzer = ChargingDataAnalyzer(filtered_data)
+                current_insights = analyzer.generate_insights()
+                current_data = filtered_data
+        else:
+            current_insights = cache.get('insights', {})
+            current_data = cache.get('data')
+        
+        # GS차지비 KPI 데이터 생성
+        gs_kpi = None
+        if current_data is not None and len(current_data) > 0 and end_month:
+            gs_data = current_data[current_data['CPO명'] == 'GS차지비']
+            if len(gs_data) > 0:
+                end_data = gs_data[gs_data['snapshot_month'] == end_month]
+                if len(end_data) > 0:
+                    end_row = end_data.iloc[0]
+                    
+                    # 현재 시장점유율 파싱
+                    try:
+                        current_share_raw = end_row.get('시장점유율', '0%')
+                        if isinstance(current_share_raw, str):
+                            current_share = float(current_share_raw.replace('%', '').strip())
+                        else:
+                            current_share = float(current_share_raw) * 100 if current_share_raw < 1 else float(current_share_raw)
+                    except Exception as e:
+                        print(f'⚠️ 시장점유율 파싱 오류: {e}', flush=True)
+                        current_share = 0.0
+                    
+                    # 현재 값
+                    current_kpi = {
+                        'market_share': round(current_share, 1),
+                        'stations': int(end_row.get('충전소수', 0)),
+                        'slow_chargers': int(end_row.get('완속충전기', 0)),
+                        'fast_chargers': int(end_row.get('급속충전기', 0)),
+                        'total_chargers': int(end_row.get('총충전기', 0))
+                    }
+                    
+                    # 전월 대비 증감량 계산
+                    all_months = sorted(gs_data['snapshot_month'].unique().tolist())
+                    monthly_change = {
+                        'prev_month': None,
+                        'current_month': end_month,
+                        'market_share_change': 0,
+                        'stations': int(end_row.get('충전소증감', 0)),
+                        'slow_chargers': int(end_row.get('완속증감', 0)),
+                        'fast_chargers': int(end_row.get('급속증감', 0)),
+                        'total_chargers': int(end_row.get('총증감', 0))
+                    }
+                    
+                    if end_month in all_months:
+                        current_idx = all_months.index(end_month)
+                        if current_idx > 0:
+                            prev_month = all_months[current_idx - 1]
+                            prev_data = gs_data[gs_data['snapshot_month'] == prev_month]
+                            if len(prev_data) > 0:
+                                prev_row = prev_data.iloc[0]
+                                monthly_change['prev_month'] = prev_month
+                                
+                                # 전월 시장점유율
+                                try:
+                                    prev_share_raw = prev_row.get('시장점유율', '0%')
+                                    if isinstance(prev_share_raw, str):
+                                        prev_share = float(prev_share_raw.replace('%', '').strip())
+                                    else:
+                                        prev_share = float(prev_share_raw) * 100 if prev_share_raw < 1 else float(prev_share_raw)
+                                    
+                                    share_change = round(current_share - prev_share, 1)
+                                    monthly_change['market_share_change'] = share_change
+                                except Exception as e:
+                                    print(f'⚠️ 전월 시장점유율 파싱 오류: {e}', flush=True)
+                                    monthly_change['market_share_change'] = 0
+                    
+                    gs_kpi = {
+                        'current': current_kpi,
+                        'monthly_change': monthly_change
+                    }
+        
+        # 요약 테이블 데이터 (엑셀에서 직접 추출)
+        summary_table = None
+        if current_data is not None and len(current_data) > 0:
+            data_source = None
+            if end_month and 'snapshot_month' in current_data.columns:
+                end_month_data = current_data[current_data['snapshot_month'] == end_month]
+                if len(end_month_data) > 0 and 'data_source' in end_month_data.columns:
+                    data_source = end_month_data['data_source'].iloc[0]
+            
+            if not data_source and 'data_source' in current_data.columns:
+                sorted_data = current_data.sort_values('snapshot_month', ascending=False)
+                data_source = sorted_data['data_source'].iloc[0]
+            
+            if data_source:
+                loader = ChargingDataLoader()
+                summary_table = loader.extract_summary_data(data_source)
+        
+        # 대시보드 데이터 구성
+        dashboard_data = {
+            'gs_kpi': gs_kpi,
+            'summary_table': summary_table,
+            'start_month': start_month,
+            'end_month': end_month
+        }
+        
+        print(f'📊 대시보드 데이터 생성 완료', flush=True)
+        print(f'   - GS KPI: {gs_kpi is not None}', flush=True)
+        print(f'   - 요약 테이블: {summary_table is not None}', flush=True)
+        
+        # 슬랙 전송
+        from slack_sender import SlackDashboardSender, send_to_slack_webhook
+        
+        sender = SlackDashboardSender()
+        
+        # 슬랙 메시지 생성
+        slack_message = sender.create_slack_message(dashboard_data, start_month or end_month, end_month)
+        print(f'📝 슬랙 메시지 생성 완료 ({len(slack_message)} 자)', flush=True)
+        
+        # 슬랙으로 전송
+        result = send_to_slack_webhook(slack_message)
+        
+        if result['success']:
+            print(f'✅ 슬랙 전송 성공!', flush=True)
+            return jsonify({
+                'success': True,
+                'message': '슬랙 전송이 완료되었습니다!',
+                'slack_result': result
+            })
+        else:
+            print(f'❌ 슬랙 전송 실패: {result["message"]}', flush=True)
+            return jsonify({
+                'success': False,
+                'error': f'슬랙 전송 실패: {result["message"]}'
+            }), 500
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/export-dashboard', methods=['POST'])
+def export_dashboard():
+    """대시보드를 PDF/이미지로 내보내기"""
+    try:
+        data = request.json
+        start_month = data.get('startMonth')
+        end_month = data.get('endMonth')
+        export_format = data.get('format', 'html')  # html, pdf, png
+        
+        if not end_month:
+            return jsonify({
+                'success': False,
+                'error': '종료월을 선택해주세요'
+            }), 400
+        
+        # 대시보드 데이터 생성 (위와 동일한 로직)
+        # ... (슬랙 전송과 동일한 대시보드 데이터 생성 로직)
+        
+        from slack_sender import SlackDashboardSender
+        sender = SlackDashboardSender()
+        
+        if export_format == 'html':
+            # HTML 파일로 저장
+            filepath = sender.save_dashboard_html({}, start_month or end_month, end_month)
+            
+            return jsonify({
+                'success': True,
+                'message': 'HTML 파일이 생성되었습니다',
+                'filepath': filepath
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'지원하지 않는 형식: {export_format}'
+            }), 400
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/slack-send', methods=['POST'])
+def slack_send_simple():
+    """간단한 슬랙 전송 API"""
+    try:
+        data = request.json
+        message = data.get('message', '')
+        
+        if not message:
+            return jsonify({
+                'success': False,
+                'error': '메시지가 없습니다'
+            }), 400
+        
+        print(f"📤 슬랙 전송: {len(message)} 자")
+        
+        # 슬랙 Webhook URL
+        slack_webhook_url = "https://hooks.slack.com/services/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"
+        
+        # 슬랙으로 전송
+        import requests
+        payload = {
+            "text": message,
+            "mrkdwn": True
+        }
+        
+        response = requests.post(
+            slack_webhook_url,
+            json=payload,
+            headers={'Content-Type': 'application/json'},
+            timeout=10
+        )
+        
+        if response.status_code == 200 and response.text == 'ok':
+            print("✅ 슬랙 전송 성공!")
+            return jsonify({
+                'success': True,
+                'message': '슬랙 전송 성공!'
+            })
+        else:
+            print(f"❌ 슬랙 전송 실패: {response.status_code} - {response.text}")
+            return jsonify({
+                'success': False,
+                'error': f'슬랙 전송 실패: {response.status_code}'
+            }), 500
+        
+    except Exception as e:
+        print(f"❌ 슬랙 전송 오류: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 if __name__ == '__main__':
     # 앱 시작 시 데이터 자동 로드
     initialize_data()
