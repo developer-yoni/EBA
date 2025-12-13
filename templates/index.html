@@ -1634,7 +1634,7 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('dashboard')">📊 DASHBOARD</button>
             <button class="tab" onclick="switchTab('report')">🤖 AI REPORT</button>
-            <button class="tab" onclick="switchTab('query')">💬 커스텀 질의</button>
+            <button class="tab" onclick="switchTab('query')">💬 Insight Explorer</button>
             <button class="tab" onclick="switchTab('simulation')">🎯 SIMULATION</button>
         </div>
         
@@ -1797,11 +1797,11 @@
             </div>
         </div>
         
-        <!-- 커스텀 질의 탭 -->
+        <!-- Insight Explorer 탭 -->
         <div id="queryTab" class="tab-content">
             <div class="card query-box">
-                <h3>💬 커스텀 질의</h3>
-                <p style="color: #718096; margin-bottom: 15px;">데이터에 대해 궁금한 점을 자유롭게 질문하세요. AI가 정확한 데이터를 기반으로 답변합니다.</p>
+                <h3>💬 Insight Explorer</h3>
+                <p style="color: #718096; margin-bottom: 15px;">데이터를 직접 탐색하고 의미 있는 인사이트를 발견하세요.</p>
                 <input type="text" class="query-input" id="queryInput" placeholder="예: 2025년 10월 급속충전기를 많이 운영하는 충전사업자 top 3 알려줘">
                 <button class="btn" onclick="submitQuery()">질문하기</button>
                 <div id="queryResult" style="margin-top: 20px;"></div>
@@ -5646,8 +5646,8 @@
                     return null;
                 }
                 
-                // 기간 표시
-                const periodText = startMonth === endMonth ? endMonth : `${startMonth} ~ ${endMonth}`;
+                // 기간 표시 (종료월만 표시)
+                const periodText = endMonth;
                 
                 // 현재 시간
                 const now = new Date();
