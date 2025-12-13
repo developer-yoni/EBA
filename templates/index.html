@@ -89,8 +89,16 @@
             background-image: 
                 radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
                 radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%);
-            opacity: 0;
-            animation: pageEnter 0.6s ease 0.1s forwards;
+            /* 기본은 보이도록(1) 두고, 애니메이션은 backwards로만 0을 적용해 '번쩍임' 방지 */
+            opacity: 1;
+            animation: pageEnter 0.6s ease 0.1s both;
+        }
+
+        /* 초기 진입 애니메이션 완료 후 고정 상태(모달 열고 닫아도 애니메이션 재시작/흰 화면 번쩍임 방지) */
+        body.page-entered {
+            opacity: 1 !important;
+            animation: none !important;
+            transform: none !important;
         }
         
         @keyframes pageEnter {
@@ -922,6 +930,13 @@
             visibility: visible;
             pointer-events: auto;
         }
+
+        /* 닫기 중: active 상태는 유지하되 페이드아웃만 진행 (중간에 display/visibility로 튀는 현상 방지) */
+        .modal-backdrop.closing {
+            opacity: 0;
+            visibility: visible;
+            pointer-events: none;
+        }
         
         /* 모달 컨테이너 */
         .modal-container {
@@ -1188,11 +1203,24 @@
         }
         
         /* 모달 열릴 때 body 스크롤 방지 - 스크롤바 공간 유지 */
+        html.modal-open {
+            overflow: hidden;
+        }
+
         body.modal-open {
             overflow: hidden;
             padding-right: var(--scrollbar-width, 0px);
             position: fixed;
+            top: var(--scroll-lock-top, 0px);
+            left: 0;
+            right: 0;
             width: 100%;
+            /* body에 transform이 걸려 있으면 fixed 자식(모달)이 뷰포트 기준이 아니라 body 기준으로 잡혀 위로 뜰 수 있음 */
+            transform: none !important;
+            /* pageEnter 같은 animation(forwards)이 transform을 계속 지배하면 위 설정이 먹지 않아 fixed 기준이 계속 깨질 수 있음 */
+            animation: none !important;
+            /* animation을 끊으면 body 기본값(opacity: 0)이 유지될 수 있어 흰 화면처럼 보일 수 있으니 강제 복구 */
+            opacity: 1 !important;
         }
         
         /* 반응형 */
@@ -3874,10 +3902,66 @@
         // 마지막 클릭 카드 위치 저장
         let lastClickedCardRect = null;
         let savedScrollPosition = 0;
+        let isScrollLocked = false;
         
         // 스크롤바 너비 계산
         function getScrollbarWidth() {
             return window.innerWidth - document.documentElement.clientWidth;
+        }
+
+        // 배경 스크롤 락/언락 (모달 오픈 시 스크롤 top 점프 방지)
+        function lockBackgroundScroll() {
+            if (isScrollLocked) return;
+
+            const scrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+            savedScrollPosition = scrollY;
+
+            const scrollbarWidth = getScrollbarWidth();
+            document.documentElement.style.setProperty('--scrollbar-width', `${scrollbarWidth}px`);
+
+            // class 먼저 적용 (position: fixed), 그 다음 top을 세팅해야 일부 브라우저에서 점프가 덜함
+            document.documentElement.classList.add('modal-open');
+            document.body.classList.add('modal-open');
+
+            const topValue = `-${scrollY}px`;
+            document.body.style.setProperty('--scroll-lock-top', topValue);
+            document.body.style.top = topValue; // fallback (CSS var 미지원/버그 대비)
+            document.body.style.left = '0';
+            document.body.style.right = '0';
+
+            isScrollLocked = true;
+            console.log('💾 스크롤 락:', { scrollY, scrollbarWidth });
+        }
+
+        function unlockBackgroundScroll() {
+            if (!isScrollLocked) return;
+
+            const restoreY = savedScrollPosition || 0;
+
+            document.documentElement.classList.remove('modal-open');
+            document.body.classList.remove('modal-open');
+
+            document.body.style.removeProperty('--scroll-lock-top');
+            document.body.style.top = '';
+            document.body.style.left = '';
+            document.body.style.right = '';
+            document.documentElement.style.setProperty('--scrollbar-width', '0px');
+
+            // 스크롤 복원 (DOM 업데이트 이후 1~2 프레임 보장)
+            const prevScrollBehavior = document.documentElement.style.scrollBehavior;
+            document.documentElement.style.scrollBehavior = 'auto';
+
+            requestAnimationFrame(() => {
+                window.scrollTo(0, restoreY);
+                requestAnimationFrame(() => {
+                    window.scrollTo(0, restoreY);
+                    document.documentElement.style.scrollBehavior = prevScrollBehavior;
+                });
+            });
+
+            console.log('🔄 스크롤 언락/복원:', restoreY);
+            savedScrollPosition = 0;
+            isScrollLocked = false;
         }
         
         // 카드 모달 열기
@@ -3891,16 +3975,9 @@
             if (!modalBackdrop || !modalContainer) return;
             
             console.log('🔍 모달 열기:', canvasElement.id);
-            
-            // 스크롤바 너비 저장 (body padding용)
-            const scrollbarWidth = getScrollbarWidth();
-            document.documentElement.style.setProperty('--scrollbar-width', `${scrollbarWidth}px`);
-            
-            // 현재 스크롤 위치 저장 (body 고정 시 복원용)
-            savedScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
-            document.body.style.top = `-${savedScrollPosition}px`;
-            
-            console.log('💾 스크롤 위치 저장:', savedScrollPosition);
+
+            // 모달 오픈 시 배경 스크롤 고정 (top 점프 방지)
+            lockBackgroundScroll();
             
             // 클릭한 카드의 위치 계산 (애니메이션 시작점용)
             const cardRect = cardElement.getBoundingClientRect();
@@ -3924,9 +4001,9 @@
             modalContainer.style.transform = 'translate(-50%, -50%) scale(0.1)';
             modalContainer.style.opacity = '0';
             
-            // 배경 표시 및 스크롤 방지
+            // 배경 표시
+            modalBackdrop.classList.remove('closing');
             modalBackdrop.classList.add('active');
-            document.body.classList.add('modal-open');
             
             // 모달 상태 초기화
             modalContainer.classList.remove('modal-open', 'modal-closing');
@@ -4066,9 +4143,7 @@
                 console.warn('⚠️ 차트 인스턴스를 찾을 수 없습니다:', chartId);
             }
             
-            // 모달 표시
-            document.body.classList.add('modal-open');
-            modalBackdrop.classList.add('active');
+            // 모달 표시 (중복 활성화 제거: 스크롤 락/스타일 재평가로 인한 점프 방지)
         }
         
         // 카드 모달 닫기
@@ -4077,33 +4152,47 @@
             const modalContainer = modalBackdrop?.querySelector('.modal-container');
             
             if (modalBackdrop && modalBackdrop.classList.contains('active')) {
-                // 닫기 애니메이션 - 중앙에서 축소
+                // 닫기 애니메이션 - 마지막 클릭 카드 위치로 되돌아가며 축소
                 if (modalContainer) {
                     modalContainer.classList.remove('modal-open');
                     modalContainer.classList.add('modal-closing');
-                    modalContainer.style.transform = 'translate(-50%, -50%) scale(0.1)';
+
+                    // backdrop은 closing 클래스로 페이드아웃 (active는 유지하여 레이아웃/가시성 튐 방지)
+                    modalBackdrop.classList.add('closing');
+
+                    let targetTransform = 'translate(-50%, -50%) scale(0.1)';
+                    try {
+                        if (lastClickedCardRect) {
+                            const viewportW = window.innerWidth;
+                            const viewportH = window.innerHeight;
+
+                            const modalRect = modalContainer.getBoundingClientRect();
+                            const modalCenterX = viewportW / 2;
+                            const modalCenterY = viewportH / 2;
+
+                            const cardCenterX = lastClickedCardRect.left + lastClickedCardRect.width / 2;
+                            const cardCenterY = lastClickedCardRect.top + lastClickedCardRect.height / 2;
+
+                            const dx = cardCenterX - modalCenterX;
+                            const dy = cardCenterY - modalCenterY;
+
+                            // 카드 크기 비율 기반으로 자연스러운 축소(균일 스케일)
+                            const scaleX = Math.max(0.08, Math.min(0.6, lastClickedCardRect.width / Math.max(1, modalRect.width)));
+                            const scaleY = Math.max(0.08, Math.min(0.6, lastClickedCardRect.height / Math.max(1, modalRect.height)));
+                            const scale = Math.max(0.08, Math.min(0.6, Math.min(scaleX, scaleY)));
+
+                            targetTransform = `translate(-50%, -50%) translate(${dx}px, ${dy}px) scale(${scale})`;
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ 닫기 애니메이션 계산 실패 - 기본 축소로 대체', e);
+                    }
+
+                    modalContainer.style.transform = targetTransform;
                     modalContainer.style.opacity = '0';
+                } else {
+                    // 컨테이너가 없으면 최소한 backdrop만 닫기 처리
+                    modalBackdrop.classList.add('closing');
                 }
-                
-                // 배경 숨기기
-                modalBackdrop.classList.remove('active');
-                document.body.classList.remove('modal-open');
-                
-                // 스크롤 위치 복원
-                document.body.style.position = '';
-                document.body.style.top = '';
-                document.body.style.width = '';
-                
-                console.log('🔄 스크롤 위치 복원:', savedScrollPosition);
-                
-                // 다음 프레임에서 스크롤 복원 (DOM 업데이트 후)
-                requestAnimationFrame(() => {
-                    window.scrollTo(0, savedScrollPosition);
-                    savedScrollPosition = 0;
-                });
-                
-                // 스크롤바 너비 CSS 변수 초기화
-                document.documentElement.style.setProperty('--scrollbar-width', '0px');
                 
                 // 모달 차트 정리
                 if (currentModalChart) {
@@ -4113,6 +4202,13 @@
                 
                 // 모달 내용 정리 및 위치 초기화
                 setTimeout(() => {
+                    // 배경 숨기기 (페이드아웃 완료 후)
+                    modalBackdrop.classList.remove('active');
+                    modalBackdrop.classList.remove('closing');
+
+                    // 스크롤 위치 복원 (닫힘 애니메이션 완료 후)
+                    unlockBackgroundScroll();
+
                     const modalChartContainer = document.getElementById('modalChartContainer');
                     const modalDetails = document.getElementById('modalDetails');
                     if (modalChartContainer) modalChartContainer.innerHTML = '';
@@ -4122,6 +4218,8 @@
                         modalContainer.style.left = '';
                         modalContainer.style.top = '';
                         modalContainer.classList.remove('modal-opening', 'modal-open', 'modal-closing');
+                        modalContainer.style.transform = '';
+                        modalContainer.style.opacity = '';
                     }
                     lastClickedCardRect = null;
                 }, 400);
@@ -5525,6 +5623,11 @@
         
         // 페이지 로드 시 모달 시스템 초기화 (대시보드가 없을 때를 위해)
         window.addEventListener('load', () => {
+            // 진입 애니메이션이 끝나면 body를 "완료" 상태로 고정 (모달 토글로 애니메이션 재시작 방지)
+            setTimeout(() => {
+                document.body.classList.add('page-entered');
+            }, 800);
+
             setTimeout(() => {
                 initializeModalSystem();
             }, 2000);
