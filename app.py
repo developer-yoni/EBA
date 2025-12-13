@@ -1888,8 +1888,9 @@ def slack_send_simple():
         
         print(f"📤 슬랙 전송: {len(message)} 자")
         
-        # 슬랙 Webhook URL
-        slack_webhook_url = "https://hooks.slack.com/services/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"
+        # 슬랙 Webhook URL (환경 변수에서 가져오기)
+        import os
+        slack_webhook_url = os.getenv('SLACK_WEBHOOK_URL', 'https://hooks.slack.com/services/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')
         
         # 슬랙으로 전송
         import requests
