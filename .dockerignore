@@ -7,8 +7,8 @@ __pycache__/
 .env
 *.png
 *.csv
-*.txt
 *.md
+!requirements.txt
 exports/
 .vendor/
 .mplconfig/

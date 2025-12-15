@@ -19,6 +19,7 @@ app = Flask(__name__)
 # 전역 캐시
 cache = {
     'data': None,
+    'full_data': None,
     'insights': None,
     'report': None
 }
