@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.idea/
+.vscode/
+.env
+*.png
+*.csv
+*.txt
+*.md
+exports/
+.vendor/
+.mplconfig/
+node_modules/
