@@ -16,7 +16,7 @@ COPY . .
 
 # 불필요한 파일 제외는 .dockerignore에서 처리
 
-EXPOSE 5000
+EXPOSE 5001
 
 # gunicorn으로 프로덕션 실행
-CMD ["python", "-m", "gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
+CMD ["python", "-m", "gunicorn", "-w", "4", "-b", "0.0.0.0:5001", "app:app"]
