@@ -3,11 +3,16 @@
 """
 from flask import Flask, render_template, jsonify, request
 import json
+import os
 import pandas as pd
+from dotenv import load_dotenv
 from data_loader import ChargingDataLoader
 from data_analyzer import ChargingDataAnalyzer
 from ai_report_generator import AIReportGenerator
 from query_analyzer import QueryAnalyzer
+
+# 환경변수 로드
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -1888,8 +1893,8 @@ def slack_send_simple():
         
         print(f"📤 슬랙 전송: {len(message)} 자")
         
-        # 슬랙 Webhook URL
-        slack_webhook_url = "https://hooks.slack.com/services/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"
+        # 슬랙 Webhook URL (환경변수에서 로드)
+        slack_webhook_url = os.getenv('SLACK_WEBHOOK_URL', '')
         
         # 슬랙으로 전송
         import requests

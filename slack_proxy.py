@@ -5,6 +5,11 @@ CORS 문제를 해결하기 위한 프록시
 """
 from flask import Flask, request, jsonify
 import requests
+import os
+from dotenv import load_dotenv
+
+# 환경변수 로드
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -16,8 +21,8 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
-# 슬랙 Webhook URL
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
+# 슬랙 Webhook URL (환경변수에서 로드)
+SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL', '')
 
 def send_to_slack_webhook(message: str) -> dict:
     """

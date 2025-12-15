@@ -4,9 +4,14 @@
 """
 import requests
 import json
+import os
+from dotenv import load_dotenv
 
-# 슬랙 Webhook URL
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
+# 환경변수 로드
+load_dotenv()
+
+# 슬랙 Webhook URL (환경변수에서 로드)
+SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL', '')
 
 def test_slack_message():
     """슬랙 메시지 전송 테스트"""
