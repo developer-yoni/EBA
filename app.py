@@ -1496,6 +1496,74 @@ def scenario_simulator():
         }), 500
 
 
+@app.route('/api/scenario-simulator/ml-only', methods=['POST'])
+def scenario_simulator_ml_only():
+    """
+    ML 계산만 수행하는 빠른 API (Bedrock 호출 없음)
+    
+    프론트엔드에서 순차적 렌더링을 위해 사용:
+    1. 먼저 이 API로 ML 결과(숫자, 차트)를 빠르게 표시
+    2. 이후 /api/scenario-simulator로 전체 인사이트 로드
+    """
+    try:
+        data = request.json
+        mode = data.get('mode', 'charger_to_share')
+        base_month = data.get('baseMonth')
+        sim_period_months = data.get('simPeriodMonths', 6)
+        
+        if not base_month:
+            return jsonify({'success': False, 'error': '기준월(baseMonth)을 선택해주세요'}), 400
+        
+        if cache['full_data'] is None:
+            return jsonify({'success': False, 'error': '먼저 데이터를 로드해주세요'}), 400
+        
+        all_months = sorted(cache['full_data']['snapshot_month'].unique().tolist())
+        earliest_month = all_months[0]
+        rag_latest_month = all_months[-1]
+        
+        if base_month < earliest_month or base_month > rag_latest_month:
+            return jsonify({
+                'success': False,
+                'error': f'기준월은 RAG 데이터 범위 내여야 합니다 ({earliest_month} ~ {rag_latest_month})'
+            }), 400
+        
+        from scenario_simulator import ScenarioSimulator
+        simulator = ScenarioSimulator()
+        
+        if mode == 'share_to_charger':
+            # 모드 2: 목표 점유율 → 필요 충전기 (ML만)
+            target_share = data.get('targetShare', 17.0)
+            
+            print(f'\n⚡ ML-Only API 호출 (모드 2)', flush=True)
+            result = simulator.calculate_required_chargers_ml_only(
+                base_month=base_month,
+                sim_period_months=sim_period_months,
+                target_share=target_share,
+                full_data=cache['full_data']
+            )
+        else:
+            # 모드 1: 충전기 → 점유율 (ML만)
+            extra_chargers = data.get('extraChargers', 0)
+            
+            print(f'\n⚡ ML-Only API 호출 (모드 1)', flush=True)
+            result = simulator.run_simulation_ml_only(
+                base_month=base_month,
+                sim_period_months=sim_period_months,
+                extra_chargers=extra_chargers,
+                full_data=cache['full_data']
+            )
+        
+        if result.get('success'):
+            return jsonify(result)
+        else:
+            return jsonify({'success': False, 'error': result.get('error', 'ML 계산 실패')}), 500
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/scenario-simulator/months', methods=['GET'])
 def get_simulator_months():
     """시뮬레이터에서 사용 가능한 기준월 목록 조회"""
