@@ -31,3 +31,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Deploy script (line ending issues)
+deploy.sh
